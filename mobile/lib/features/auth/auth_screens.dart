@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/twobee_theme.dart';
 import '../common/shared_screens.dart';
@@ -264,13 +265,56 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: TwoBeeColors.primarySoft.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Text('2Bee Super-App', style: TextStyle(fontWeight: FontWeight.w700, color: TwoBeeColors.primary)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: TwoBeeColors.primarySoft.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text('2Bee Super-App', style: TextStyle(fontWeight: FontWeight.w700, color: TwoBeeColors.primary)),
+                  ),
+                  IconButton(
+                    tooltip: 'Server Host Settings',
+                    icon: const Icon(Icons.settings_ethernet_rounded, color: TwoBeeColors.textSecondary),
+                    onPressed: () async {
+                      final ctrl = TextEditingController(text: AppConfig.serverOrigin);
+                      await showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Backend Server URL'),
+                          content: TextField(
+                            controller: ctrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Server Origin',
+                              hintText: 'http://192.168.1.10:4000',
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () async {
+                                await AppConfig.setServerOrigin(null);
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                setState(() {});
+                              },
+                              child: const Text('Reset'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () async {
+                                await AppConfig.setServerOrigin(ctrl.text);
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                setState(() {});
+                              },
+                              child: const Text('Save'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               const Text('Sign in with Phone', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),

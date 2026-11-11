@@ -26,6 +26,81 @@ class _RideLocationScreenState extends ConsumerState<RideLocationScreen> {
   Map<String, dynamic> _dropoff = _rideZoneSpots[2];
   bool _loading = false;
 
+  Future<void> _searchPlaceDialog({required bool forPickup}) async {
+    final qCtrl = TextEditingController();
+    List<Map<String, dynamic>> results = List<Map<String, dynamic>>.from(_rideZoneSpots);
+    bool searching = false;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text(forPickup ? 'Search Pickup Spot (OSM)' : 'Search Destination (OSM)'),
+          content: SizedBox(
+            width: 340,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: qCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Search Banani, Uttara, Gulshan...',
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.search),
+                      onPressed: () async {
+                        setD(() => searching = true);
+                        try {
+                          final res = await ref.read(apiClientProvider).get('/common/places/search?q=${Uri.encodeComponent(qCtrl.text.trim())}');
+                          final list = (res['places'] as List?) ?? [];
+                          setD(() {
+                            results = list
+                                .map((p) => {
+                                      'id': p['zoneId'] ?? 'zone-banani',
+                                      'name': p['name'] ?? p['displayName'] ?? 'Dhaka Spot',
+                                      'lat': (p['lat'] as num?)?.toDouble() ?? 23.7937,
+                                      'lng': (p['lng'] as num?)?.toDouble() ?? 90.4066,
+                                    })
+                                .toList();
+                          });
+                        } finally {
+                          setD(() => searching = false);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                if (searching) const LinearProgressIndicator(),
+                SizedBox(
+                  height: 200,
+                  child: ListView(
+                    children: results
+                        .map((r) => ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.place_outlined, color: TwoBeeColors.primary),
+                              title: Text(r['name'] as String, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              onTap: () {
+                                setState(() {
+                                  if (forPickup) {
+                                    _pickup = r;
+                                  } else {
+                                    _dropoff = r;
+                                  }
+                                });
+                                Navigator.pop(ctx);
+                              },
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+        ),
+      ),
+    );
+  }
+
   Future<void> _estimate() async {
     setState(() => _loading = true);
     try {
@@ -74,20 +149,42 @@ class _RideLocationScreenState extends ConsumerState<RideLocationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Pickup Spot', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: TwoBeeColors.textSecondary)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Pickup Spot', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: TwoBeeColors.textSecondary)),
+                      TextButton.icon(
+                        onPressed: () => _searchPlaceDialog(forPickup: true),
+                        icon: const Icon(Icons.search, size: 16),
+                        label: const Text('Search Map'),
+                      ),
+                    ],
+                  ),
                   DropdownButton<Map<String, dynamic>>(
                     isExpanded: true,
-                    value: _pickup,
+                    value: _rideZoneSpots.contains(_pickup) ? _pickup : null,
+                    hint: Text(_pickup['name'] as String),
                     items: _rideZoneSpots.map((z) => DropdownMenuItem(value: z, child: Text(z['name'] as String))).toList(),
                     onChanged: (v) {
                       if (v != null) setState(() => _pickup = v);
                     },
                   ),
-                  const SizedBox(height: 12),
-                  const Text('Where to?', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: TwoBeeColors.textSecondary)),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Where to?', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: TwoBeeColors.textSecondary)),
+                      TextButton.icon(
+                        onPressed: () => _searchPlaceDialog(forPickup: false),
+                        icon: const Icon(Icons.search, size: 16),
+                        label: const Text('Search Map'),
+                      ),
+                    ],
+                  ),
                   DropdownButton<Map<String, dynamic>>(
                     isExpanded: true,
-                    value: _dropoff,
+                    value: _rideZoneSpots.contains(_dropoff) ? _dropoff : null,
+                    hint: Text(_dropoff['name'] as String),
                     items: _rideZoneSpots.map((z) => DropdownMenuItem(value: z, child: Text(z['name'] as String))).toList(),
                     onChanged: (v) {
                       if (v != null) setState(() => _dropoff = v);
@@ -200,7 +297,23 @@ class _RideTierScreenState extends ConsumerState<RideTierScreen> {
             );
           }),
           const SizedBox(height: 8),
-          TextField(controller: _promoCtrl, decoration: const InputDecoration(hintText: 'Promo code (try 2BEE10)')),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(controller: _promoCtrl, decoration: const InputDecoration(hintText: 'Promo code (try 2BEE10)')),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: () {
+                  final ok = _promoCtrl.text.trim().toUpperCase() == '2BEE10';
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(ok ? 'Promo 2BEE10 applied (10% discount calculated on confirm)!' : 'Try promo code 2BEE10')),
+                  );
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           PaymentSelectorCard(selectedMethod: _payment, onSelected: (m) => setState(() => _payment = m)),
           const SizedBox(height: 18),
@@ -413,7 +526,35 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Fare Breakdown', style: TextStyle(fontWeight: FontWeight.w700)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Fare Breakdown', style: TextStyle(fontWeight: FontWeight.w700)),
+                        TextButton.icon(
+                          onPressed: () => showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: Text('Ride Invoice · ${t['tripCode']}'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Pickup: ${t['pickupAddress']}'),
+                                  Text('Dropoff: ${t['dropoffAddress']}'),
+                                  Text('Tier: ${t['fleetTier']}'),
+                                  const Divider(),
+                                  Text('Total Fare: ${bdt(t['totalFareBdt'] as num)}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                                  Text('Payment: ${t['paymentMethod']} (${t['paymentStatus']})'),
+                                ],
+                              ),
+                              actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+                            ),
+                          ),
+                          icon: const Icon(Icons.receipt_outlined, size: 16),
+                          label: const Text('Invoice'),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Base + Distance'), Text(bdt(t['totalFareBdt'] as num))]),
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Payment'), Text('${t['paymentMethod']} (${t['paymentStatus']})')]),

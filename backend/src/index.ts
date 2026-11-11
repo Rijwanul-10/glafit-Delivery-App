@@ -21,9 +21,9 @@ async function bootstrap() {
   const httpServer = http.createServer(app);
   initSocketServer(httpServer);
 
-  httpServer.listen(env.port, () => {
+  httpServer.listen(env.port, '0.0.0.0', () => {
     console.info(
-      `[2Bee API] Listening on http://localhost:${env.port} | DB=${env.dbMode} | GEO=${geoMatchService.getEngineName()}`,
+      `[2Bee API] Listening on http://0.0.0.0:${env.port} (local: http://localhost:${env.port}) | DB=${env.dbMode} | GEO=${geoMatchService.getEngineName()}`,
     );
   });
 }

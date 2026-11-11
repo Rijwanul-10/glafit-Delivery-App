@@ -249,6 +249,9 @@ class FoodSearchScreen extends ConsumerStatefulWidget {
 class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
   final _ctrl = TextEditingController();
   List<dynamic> _hits = [];
+  bool _topRatedOnly = false;
+  bool _hkOnly = false;
+  bool _fastOnly = false;
 
   @override
   void initState() {
@@ -263,6 +266,13 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final visible = _hits.where((x) {
+      if (_topRatedOnly && ((x['rating'] as num?) ?? 0) < 4.8) return false;
+      if (_hkOnly && x['merchantType'] != 'HOME_KITCHEN') return false;
+      if (_fastOnly && ((x['avgPrepMins'] as num?) ?? 99) > 25) return false;
+      return true;
+    }).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: TextField(
@@ -272,23 +282,44 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
           onChanged: _search,
         ),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _hits.length,
-        itemBuilder: (_, i) {
-          final r = _hits[i] as Map;
-          return Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: ListTile(
-              title: Text(r['businessName'].toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text('${r['merchantType']} · ★${r['rating']}'),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => RestaurantDetailScreen(merchantId: r['id'] as String)),
-              ),
+      body: Column(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                FilterChip(label: const Text('Top Rated 4.8★+'), selected: _topRatedOnly, onSelected: (v) => setState(() => _topRatedOnly = v)),
+                const SizedBox(width: 8),
+                FilterChip(label: const Text('Home Kitchens'), selected: _hkOnly, onSelected: (v) => setState(() => _hkOnly = v)),
+                const SizedBox(width: 8),
+                FilterChip(label: const Text('Fast <=25m'), selected: _fastOnly, onSelected: (v) => setState(() => _fastOnly = v)),
+              ],
             ),
-          );
-        },
+          ),
+          Expanded(
+            child: visible.isEmpty
+                ? const Center(child: Text('No matching kitchens found.'))
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: visible.length,
+                    itemBuilder: (_, i) {
+                      final r = visible[i] as Map;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: ListTile(
+                          title: Text(r['businessName'].toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
+                          subtitle: Text('${r['merchantType']} · ★${r['rating']} · ${r['avgPrepMins']}m'),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => RestaurantDetailScreen(merchantId: r['id'] as String)),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -647,6 +678,23 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             );
           }),
           const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                if (cart.merchantId != null) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => RestaurantDetailScreen(merchantId: cart.merchantId!)),
+                  );
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('+ Add more items'),
+            ),
+          ),
           TextField(controller: _noteCtrl, decoration: const InputDecoration(labelText: 'Cooking instructions')),
           const SizedBox(height: 10),
           Row(
@@ -743,9 +791,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       });
       ref.read(cartProvider.notifier).clear();
       if (!mounted) return;
+      final order = Map<String, dynamic>.from(res['order'] as Map);
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => FoodLiveTrackingScreen(orderId: res['order']['id'] as String)),
+        MaterialPageRoute(builder: (_) => FoodOrderPlacedScreen(order: order)),
         (r) => r.isFirst,
       );
     } catch (e) {
@@ -781,6 +830,84 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class FoodOrderPlacedScreen extends StatelessWidget {
+  final Map<String, dynamic> order;
+  const FoodOrderPlacedScreen({super.key, required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Order Placed')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircleAvatar(
+              radius: 40,
+              backgroundColor: TwoBeeColors.surfaceTonal,
+              child: Icon(Icons.check_circle_rounded, color: TwoBeeColors.primary, size: 48),
+            ),
+            const SizedBox(height: 18),
+            Text('Order ${order['orderCode']} Confirmed!', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 6),
+            Text(
+              'Payment: ${order['paymentMethod']} · ${bdt(order['totalBdt'] as num)}',
+              style: const TextStyle(color: TwoBeeColors.textSecondary, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 20),
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _StepDot('Confirmed', true),
+                    _StepDot('Cooking', false),
+                    _StepDot('On the way', false),
+                    _StepDot('Delivered', false),
+                  ],
+                ),
+              ),
+            ),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: () => Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => FoodLiveTrackingScreen(orderId: order['id'] as String)),
+              ),
+              child: const Text('Track Live Order ->'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
+              child: const Text('Back to Home'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StepDot extends StatelessWidget {
+  final String label;
+  final bool active;
+  const _StepDot(this.label, this.active);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(active ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: active ? TwoBeeColors.primary : TwoBeeColors.textSecondary, size: 22),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(fontSize: 11, fontWeight: active ? FontWeight.w700 : FontWeight.w400)),
+      ],
     );
   }
 }
@@ -894,7 +1021,8 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
               color: TwoBeeColors.surfaceTonal,
               child: ListTile(
                 title: Text('Status: ${o['status']}', style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
-                subtitle: Text('${o['merchant']?['businessName']} -> ${o['deliveryAddress']}'),
+                subtitle: Text('${o['merchant']?['businessName']} -> ${o['deliveryAddress']}\nHandover PIN: ${o['deliveryPin'] ?? '----'}'),
+                isThreeLine: true,
                 trailing: Text(bdt(o['totalBdt'] as num), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
               ),
             ),
@@ -929,10 +1057,52 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                     const SizedBox(height: 8),
                     ...items.map((i) => _BillRow('${i['quantity']}x ${i['itemName']}', bdt(i['lineTotalBdt'] as num))),
                     const Divider(),
+                    _BillRow('Subtotal', bdt(o['subtotalBdt'] ?? 0)),
+                    _BillRow('Delivery & Service', bdt(((o['deliveryFeeBdt'] ?? 0) as num) + ((o['packagingFeeBdt'] ?? 0) as num) + ((o['serviceFeeBdt'] ?? 0) as num))),
+                    _BillRow('Discount', '-${bdt(o['discountBdt'] ?? 0)}'),
+                    const Divider(),
                     _BillRow('Total Paid (${o['paymentMethod']})', bdt(o['totalBdt'] as num), bold: true),
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportLegalScreen(title: 'Order Support'))),
+                    icon: const Icon(Icons.help_outline),
+                    label: const Text('Need Help'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final m = o['merchant'] as Map?;
+                      if (m != null) {
+                        for (final it in items) {
+                          ref.read(cartProvider.notifier).addItem(
+                                merchantId: m['id'] as String,
+                                merchantName: m['businessName'] as String,
+                                deliveryFee: (o['deliveryFeeBdt'] as num).toDouble(),
+                                line: CartLine(
+                                  menuItemId: it['menuItemId'] as String,
+                                  name: it['itemName'] as String,
+                                  basePrice: (it['unitPriceBdt'] as num).toDouble(),
+                                  quantity: (it['quantity'] as num).toInt(),
+                                ),
+                              );
+                        }
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
+                      }
+                    },
+                    icon: const Icon(Icons.replay_rounded),
+                    label: const Text('Reorder'),
+                  ),
+                ),
+              ],
             ),
             if (o['status'] == 'DELIVERED') ...[
               const SizedBox(height: 12),

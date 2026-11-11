@@ -34,6 +34,11 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
   final _recipientName = TextEditingController(text: 'Farhana Yasmin');
   final _recipientPhone = TextEditingController(text: '+8801811111111');
   final _codGoodsCtrl = TextEditingController(text: '1200');
+  final _lengthCtrl = TextEditingController(text: '30');
+  final _widthCtrl = TextEditingController(text: '20');
+  final _heightCtrl = TextEditingController(text: '15');
+  final _declaredValCtrl = TextEditingController(text: '1500');
+  final _handlingNoteCtrl = TextEditingController();
   String _payment = 'COD';
   Map<String, dynamic>? _estimate;
   bool _loading = false;
@@ -71,6 +76,11 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
         'packageSizeClass': _sizeClass,
         'category': _category,
         'weightKg': _weightKg,
+        'lengthCm': double.tryParse(_lengthCtrl.text.trim()) ?? 30,
+        'widthCm': double.tryParse(_widthCtrl.text.trim()) ?? 20,
+        'heightCm': double.tryParse(_heightCtrl.text.trim()) ?? 15,
+        'declaredValueBdt': double.tryParse(_declaredValCtrl.text.trim()) ?? 1000,
+        'handlingNote': _handlingNoteCtrl.text.trim().isNotEmpty ? _handlingNoteCtrl.text.trim() : null,
         'isProtected': _protected,
         'senderName': _senderName.text.trim(),
         'senderPhone': _senderPhone.text.trim(),
@@ -212,7 +222,68 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
                         ButtonSegment(value: 'LARGE', label: Text('Large')),
                       ],
                       selected: {_sizeClass},
-                      onSelectionChanged: (v) => setState(() => _sizeClass = v.first),
+                      onSelectionChanged: (v) {
+                        final s = v.first;
+                        setState(() {
+                          _sizeClass = s;
+                          if (s == 'DOC') {
+                            _lengthCtrl.text = '30';
+                            _widthCtrl.text = '22';
+                            _heightCtrl.text = '5';
+                          } else if (s == 'SMALL') {
+                            _lengthCtrl.text = '25';
+                            _widthCtrl.text = '20';
+                            _heightCtrl.text = '15';
+                          } else if (s == 'MEDIUM') {
+                            _lengthCtrl.text = '35';
+                            _widthCtrl.text = '25';
+                            _heightCtrl.text = '20';
+                          } else {
+                            _lengthCtrl.text = '45';
+                            _widthCtrl.text = '40';
+                            _heightCtrl.text = '35';
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _lengthCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'L (cm)'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _widthCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'W (cm)'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _heightCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'H (cm)'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _declaredValCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Declared Value (৳)'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _handlingNoteCtrl,
+                      decoration: const InputDecoration(labelText: 'Handling Instructions (optional, e.g. Fragile / Keep upright)'),
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -429,6 +500,51 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
                     const SizedBox(height: 4),
                     Text('Delivery Fee: ${bdt(s['deliveryChargeBdt'] as num)} (${s['paymentMethod']})'),
                     if ((s['codCollectBdt'] as num) > 0) Text('Recipient COD Due: ${bdt(s['codCollectBdt'] as num)}'),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  title: Text('Waybill · ${s['trackingCode']}'),
+                                  content: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('From: ${s['senderName']} (${s['pickupAddress']})'),
+                                      Text('To: ${s['recipientName']} (${s['dropoffAddress']})'),
+                                      const Divider(),
+                                      Text('Tier: ${s['tier']} · Weight: ${s['weightKg']} kg'),
+                                      Text('Delivery Fee: ${bdt(s['deliveryChargeBdt'] as num)}'),
+                                      Text('COD Goods Due: ${bdt(s['codCollectBdt'] as num)}'),
+                                      Text('Security PIN: ${s['deliveryPin']}'),
+                                    ],
+                                  ),
+                                  actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.description_outlined, size: 18),
+                            label: const Text('Waybill'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Tracking link copied: https://2bee.app/track/${s['trackingCode']}')),
+                              );
+                            },
+                            icon: const Icon(Icons.share_outlined, size: 18),
+                            label: const Text('Share Link'),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),

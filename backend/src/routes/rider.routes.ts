@@ -1227,5 +1227,79 @@ panel.post(
   }),
 );
 
+panel.post(
+  '/rentals/book',
+  asyncHandler(async (req, res) => {
+    const rp = await getRiderOrThrow(req.roleSession!.profileId);
+    if (rp.kycStatus !== 'APPROVED') {
+      throw new HttpError(403, 'RIDER_PENDING_APPROVAL', 'Approval required before booking a rental bike');
+    }
+    const { bikeId, planType } = z
+      .object({
+        bikeId: z.string().min(1),
+        planType: z.enum(['DAILY', 'WEEKLY', 'RENT_TO_OWN']).default('DAILY'),
+      })
+      .parse(req.body);
+    const prisma = getPrisma();
+    const bike = await prisma.fleetBike.findUnique({ where: { id: bikeId } });
+    if (!bike) throw new HttpError(404, 'BIKE_NOT_FOUND', 'Fleet bike not found');
+
+    const rental = await prisma.bikeRental.create({
+      data: {
+        riderId: rp.id,
+        bikeId: bike.id,
+        bikeModel: bike.modelName,
+        plateNo: `2BEE-EV-${Math.floor(1000 + Math.random() * 9000)}`,
+        hubName: bike.hubName,
+        planType,
+        dailyRateBdt: bike.dailyRateBdt,
+        status: 'ACTIVE',
+        nextDebitAt: new Date(Date.now() + 86400 * 1000),
+      },
+    });
+    res.status(201).json({ ok: true, rental });
+  }),
+);
+
+panel.get(
+  '/food/:id',
+  asyncHandler(async (req, res) => {
+    const rp = await getRiderOrThrow(req.roleSession!.profileId);
+    const prisma = getPrisma();
+    const order = await prisma.foodOrder.findUnique({
+      where: { id: String(req.params.id) },
+      include: { items: true, merchant: true, user: { select: { fullName: true, phone: true } } },
+    });
+    if (!order || order.riderId !== rp.id) throw new HttpError(404, 'ORDER_NOT_FOUND', 'Food job not found');
+    res.json({ ok: true, order });
+  }),
+);
+
+panel.get(
+  '/ride/:id',
+  asyncHandler(async (req, res) => {
+    const rp = await getRiderOrThrow(req.roleSession!.profileId);
+    const prisma = getPrisma();
+    const trip = await prisma.rideTrip.findUnique({
+      where: { id: String(req.params.id) },
+      include: { user: { select: { fullName: true, phone: true } } },
+    });
+    if (!trip || trip.riderId !== rp.id) throw new HttpError(404, 'RIDE_NOT_FOUND', 'Ride job not found');
+    res.json({ ok: true, trip });
+  }),
+);
+
+panel.delete(
+  '/security/devices/:deviceId',
+  asyncHandler(async (req, res) => {
+    const rp = await getRiderOrThrow(req.roleSession!.profileId);
+    const prisma = getPrisma();
+    await prisma.activeDevice.deleteMany({
+      where: { id: String(req.params.deviceId), ownerRole: 'RIDER', ownerId: rp.id },
+    });
+    res.json({ ok: true });
+  }),
+);
+
 riderRouter.use('/panel', panel);
 

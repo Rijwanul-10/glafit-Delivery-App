@@ -860,5 +860,76 @@ panel.post(
   }),
 );
 
+panel.get(
+  '/orders/:id/slip-pdf',
+  asyncHandler(async (req, res) => {
+    const mp = await assertApprovedMerchant(req.roleSession!.profileId);
+    const prisma = getPrisma();
+    const order = await prisma.foodOrder.findUnique({
+      where: { id: String(req.params.id) },
+      include: { items: true, user: { select: { fullName: true, phone: true } } },
+    });
+    if (!order || order.merchantId !== mp.id) throw new HttpError(404, 'ORDER_NOT_FOUND', 'Order not found');
+    const pdf = await generateReceiptPdf({
+      title: `Kitchen Slip — ${order.orderCode}`,
+      subtitle: `${mp.businessName} · ${order.user.fullName}`,
+      referenceCode: order.orderCode,
+      lines: [
+        ...order.items.map((i) => ({ label: `${i.quantity}x ${i.itemName}`, value: `৳${i.lineTotalBdt.toFixed(0)}` })),
+        { label: 'Cooking Note', value: order.cookingNote || 'None' },
+        { label: 'Delivery Address', value: order.deliveryAddress },
+      ],
+      totalLabel: `Order Total (${order.paymentMethod})`,
+      totalValue: `৳${order.totalBdt.toFixed(0)}`,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${order.orderCode}-slip.pdf"`);
+    res.send(pdf);
+  }),
+);
+
+panel.post(
+  '/store/staff',
+  asyncHandler(async (req, res) => {
+    const mp = await assertApprovedMerchant(req.roleSession!.profileId);
+    const parsed = z
+      .object({
+        name: z.string().min(2),
+        phone: z.string().min(10),
+        roleLabel: z.string().default('Kitchen Manager'),
+      })
+      .parse(req.body);
+    const prisma = getPrisma();
+    const staff = await prisma.merchantStaff.create({
+      data: { merchantId: mp.id, ...parsed },
+    });
+    res.status(201).json({ ok: true, staff });
+  }),
+);
+
+panel.delete(
+  '/store/staff/:staffId',
+  asyncHandler(async (req, res) => {
+    const mp = await assertApprovedMerchant(req.roleSession!.profileId);
+    const prisma = getPrisma();
+    await prisma.merchantStaff.deleteMany({
+      where: { id: String(req.params.staffId), merchantId: mp.id },
+    });
+    res.json({ ok: true });
+  }),
+);
+
+panel.delete(
+  '/security/devices/:deviceId',
+  asyncHandler(async (req, res) => {
+    const mp = await assertApprovedMerchant(req.roleSession!.profileId);
+    const prisma = getPrisma();
+    await prisma.activeDevice.deleteMany({
+      where: { id: String(req.params.deviceId), ownerRole: 'MERCHANT', ownerId: mp.id },
+    });
+    res.json({ ok: true });
+  }),
+);
+
 merchantRouter.use('/panel', panel);
 

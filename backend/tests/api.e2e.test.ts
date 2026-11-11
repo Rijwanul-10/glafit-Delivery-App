@@ -442,6 +442,117 @@ describe('2Bee Super-App Backend E2E Specification Tests', () => {
     expect(pdfRes.status).toBe(200);
     expect(pdfRes.headers['content-type']).toContain('application/pdf');
 
+    // Merchant panel verification: accept -> ready -> order slip-pdf & staff CRUD
+    const mUser = await loginPhone('+8801722222222');
+    const mRole = await request(app)
+      .post('/api/v1/merchant/login-pin')
+      .set('Authorization', `Bearer ${mUser.accessToken}`)
+      .send({ passcode: '258096' });
+    expect(mRole.status).toBe(200);
+    const mToken = mRole.body.roleToken as string;
+
+    const mAccept = await request(app)
+      .post(`/api/v1/merchant/panel/orders/${checkout.body.order.id}/accept`)
+      .set('Authorization', `Bearer ${mUser.accessToken}`)
+      .set('x-role-token', mToken)
+      .send({ prepTimeMins: 15 });
+    expect(mAccept.status).toBe(200);
+
+    const mReady = await request(app)
+      .post(`/api/v1/merchant/panel/orders/${checkout.body.order.id}/ready`)
+      .set('Authorization', `Bearer ${mUser.accessToken}`)
+      .set('x-role-token', mToken);
+    expect(mReady.status).toBe(200);
+
+    const slipRes = await request(app)
+      .get(`/api/v1/merchant/panel/orders/${checkout.body.order.id}/slip-pdf`)
+      .set('Authorization', `Bearer ${mUser.accessToken}`)
+      .set('x-role-token', mToken);
+    expect(slipRes.status).toBe(200);
+    expect(slipRes.headers['content-type']).toContain('application/pdf');
+
+    const staffAdd = await request(app)
+      .post('/api/v1/merchant/panel/store/staff')
+      .set('Authorization', `Bearer ${mUser.accessToken}`)
+      .set('x-role-token', mToken)
+      .send({ name: 'Kamrul Hasan', phone: '+8801712345678', roleTitle: 'Prep Chef' });
+    expect(staffAdd.status).toBe(201);
+    const staffId = staffAdd.body.staff.id as string;
+
+    const staffDel = await request(app)
+      .delete(`/api/v1/merchant/panel/store/staff/${staffId}`)
+      .set('Authorization', `Bearer ${mUser.accessToken}`)
+      .set('x-role-token', mToken);
+    expect(staffDel.status).toBe(200);
+
+    // Rider rental booking & job getter verification (food + ride)
+    const rUser = await loginPhone('+8801712345678');
+    const rRole = await request(app)
+      .post('/api/v1/rider/login-pin')
+      .set('Authorization', `Bearer ${rUser.accessToken}`)
+      .send({ passcode: '2580' });
+    expect(rRole.status).toBe(200);
+    const rToken = rRole.body.roleToken as string;
+
+    const rentalsGet = await request(app)
+      .get('/api/v1/rider/panel/rentals')
+      .set('Authorization', `Bearer ${rUser.accessToken}`)
+      .set('x-role-token', rToken);
+    expect(rentalsGet.status).toBe(200);
+    const bikeId = rentalsGet.body.fleetBikes[0].id as string;
+
+    const rentalBook = await request(app)
+      .post('/api/v1/rider/panel/rentals/book')
+      .set('Authorization', `Bearer ${rUser.accessToken}`)
+      .set('x-role-token', rToken)
+      .send({ bikeId, planType: 'WEEKLY' });
+    expect(rentalBook.status).toBe(201);
+    expect(rentalBook.body.rental.bikeId).toBe(bikeId);
+
+    const foodAccept = await request(app)
+      .post(`/api/v1/rider/panel/food/${checkout.body.order.id}/accept`)
+      .set('Authorization', `Bearer ${rUser.accessToken}`)
+      .set('x-role-token', rToken);
+    expect(foodAccept.status).toBe(200);
+
+    const foodJobGet = await request(app)
+      .get(`/api/v1/rider/panel/food/${checkout.body.order.id}`)
+      .set('Authorization', `Bearer ${rUser.accessToken}`)
+      .set('x-role-token', rToken);
+    expect(foodJobGet.status).toBe(200);
+    expect(foodJobGet.body.order.id).toBe(checkout.body.order.id);
+
+    const standaloneRide = await request(app)
+      .post('/api/v1/rides/request')
+      .set('Authorization', `Bearer ${client.accessToken}`)
+      .send({
+        fleetTier: '2BEE_EV_SOLO',
+        pickupAddress: 'Banani Road 11',
+        pickupLat: 23.7937,
+        pickupLng: 90.4066,
+        pickupZoneId: 'zone-banani',
+        dropoffAddress: 'Gulshan 2 Circle',
+        dropoffLat: 23.7925,
+        dropoffLng: 90.4158,
+        dropoffZoneId: 'zone-gulshan',
+        paymentMethod: 'COD',
+      });
+    expect(standaloneRide.status).toBe(201);
+    const soloRideId = standaloneRide.body.trip.id as string;
+
+    const rideAccept = await request(app)
+      .post(`/api/v1/rider/panel/ride/${soloRideId}/accept`)
+      .set('Authorization', `Bearer ${rUser.accessToken}`)
+      .set('x-role-token', rToken);
+    expect(rideAccept.status).toBe(200);
+
+    const rideJobGet = await request(app)
+      .get(`/api/v1/rider/panel/ride/${soloRideId}`)
+      .set('Authorization', `Bearer ${rUser.accessToken}`)
+      .set('x-role-token', rToken);
+    expect(rideJobGet.status).toBe(200);
+    expect(rideJobGet.body.trip.id).toBe(soloRideId);
+
     // WebSocket GPS Broadcast & Isolation test
     const clientSocket: Socket = ioClient(baseUrl, { auth: { token: client.accessToken }, transports: ['websocket'] });
     const riderSocket: Socket = ioClient(baseUrl, { auth: { token: client.accessToken }, transports: ['websocket'] });

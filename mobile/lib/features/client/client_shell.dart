@@ -596,13 +596,24 @@ class _ClientProfileTab extends ConsumerWidget {
                 child: Icon(Icons.person_rounded, color: TwoBeeColors.primary, size: 28),
               ),
               title: Text(user?['fullName']?.toString() ?? '2Bee Customer', style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: Text(user?['phone']?.toString() ?? ''),
+              subtitle: Text('${user?['phone'] ?? ''} · ${user?['email'] ?? 'Tap Edit to add email'}'),
+              trailing: IconButton(
+                icon: const Icon(Icons.edit_outlined, color: TwoBeeColors.primary),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditClientProfileScreen())),
+              ),
             ),
           ),
           const SizedBox(height: 14),
           Card(
             child: Column(
               children: [
+                ListTile(
+                  leading: const Icon(Icons.location_on_outlined, color: TwoBeeColors.primary),
+                  title: const Text('Saved Addresses (Home, Work, Airport)'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedAddressesScreen())),
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.favorite_border_rounded, color: TwoBeeColors.primary),
                   title: const Text('Favorites (Restaurants & Dishes)'),
@@ -615,6 +626,13 @@ class _ClientProfileTab extends ConsumerWidget {
                   title: const Text('Notifications'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen(roleFilter: 'CLIENT'))),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.help_outline_rounded, color: TwoBeeColors.primary),
+                  title: const Text('Help, Terms & Legal'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportLegalScreen())),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -646,6 +664,179 @@ class _ClientProfileTab extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class EditClientProfileScreen extends ConsumerStatefulWidget {
+  const EditClientProfileScreen({super.key});
+
+  @override
+  ConsumerState<EditClientProfileScreen> createState() => _EditClientProfileScreenState();
+}
+
+class _EditClientProfileScreenState extends ConsumerState<EditClientProfileScreen> {
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final u = ref.read(authControllerProvider).user;
+    _nameCtrl.text = u?['fullName']?.toString() ?? '';
+    _emailCtrl.text = u?['email']?.toString() ?? '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Edit Profile')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Full Name')),
+            const SizedBox(height: 12),
+            TextField(controller: _emailCtrl, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email Address (optional)')),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      setState(() => _saving = true);
+                      await ref.read(apiClientProvider).patch('/client/profile', body: {
+                        'fullName': _nameCtrl.text.trim(),
+                        'email': _emailCtrl.text.trim(),
+                      });
+                      await ref.read(authControllerProvider.notifier).refreshRoles();
+                      if (context.mounted) Navigator.pop(context);
+                    },
+              child: Text(_saving ? 'Saving...' : 'Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SavedAddressesScreen extends ConsumerStatefulWidget {
+  const SavedAddressesScreen({super.key});
+
+  @override
+  ConsumerState<SavedAddressesScreen> createState() => _SavedAddressesScreenState();
+}
+
+class _SavedAddressesScreenState extends ConsumerState<SavedAddressesScreen> {
+  List<dynamic> _items = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final res = await ref.read(apiClientProvider).get('/client/addresses');
+      setState(() => _items = (res['items'] as List?) ?? []);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _addAddress() async {
+    final labelCtrl = TextEditingController(text: 'Work');
+    final addrCtrl = TextEditingController();
+    String zoneId = 'zone-banani';
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Add Saved Address'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: labelCtrl, decoration: const InputDecoration(labelText: 'Label (Home / Work / Other)')),
+              const SizedBox(height: 8),
+              TextField(controller: addrCtrl, decoration: const InputDecoration(labelText: 'Street / House Address')),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: zoneId,
+                decoration: const InputDecoration(labelText: 'Dhaka Zone'),
+                items: const [
+                  DropdownMenuItem(value: 'zone-banani', child: Text('Banani')),
+                  DropdownMenuItem(value: 'zone-gulshan', child: Text('Gulshan')),
+                  DropdownMenuItem(value: 'zone-uttara', child: Text('Uttara')),
+                  DropdownMenuItem(value: 'zone-dhanmondi', child: Text('Dhanmondi')),
+                  DropdownMenuItem(value: 'zone-mirpur', child: Text('Mirpur')),
+                ],
+                onChanged: (v) => setS(() => zoneId = v ?? 'zone-banani'),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () async {
+                if (addrCtrl.text.trim().length < 3) return;
+                await ref.read(apiClientProvider).post('/client/addresses', body: {
+                  'label': labelCtrl.text.trim(),
+                  'address': addrCtrl.text.trim(),
+                  'zoneId': zoneId,
+                  'lat': 23.7937,
+                  'lng': 90.4066,
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+                _load();
+              },
+              child: const Text('Save Address'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Saved Addresses')),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: TwoBeeColors.primary,
+        foregroundColor: Colors.white,
+        onPressed: _addAddress,
+        icon: const Icon(Icons.add_location_alt_outlined),
+        label: const Text('Add Address'),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _items.isEmpty
+              ? const Center(child: Text('No saved addresses yet.'))
+              : ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _items.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) {
+                    final a = _items[i] as Map;
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.location_on_outlined, color: TwoBeeColors.primary),
+                        title: Text(a['label']?.toString() ?? 'Address', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text(a['address']?.toString() ?? ''),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline, color: TwoBeeColors.errorText),
+                          onPressed: () async {
+                            await ref.read(apiClientProvider).delete('/client/addresses/${a['id']}');
+                            _load();
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }

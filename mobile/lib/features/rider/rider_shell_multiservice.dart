@@ -92,21 +92,61 @@ class _RiderHomeTabState extends ConsumerState<_RiderHomeTab> {
   }
 
   Future<void> _toggleOnline(bool goOnline) async {
-    final token = ref.read(authControllerProvider).riderRoleToken;
-    try {
+    if (goOnline) {
+      bool p = true, r = true, f = true;
+      final confirmed = await showModalBottomSheet<bool>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setM) => Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Start Your Shift', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                const Text('Configure active services before going online', style: TextStyle(color: TwoBeeColors.textSecondary, fontSize: 12)),
+                CheckboxListTile(value: p, onChanged: (v) => setM(() => p = v ?? true), title: const Text('Parcel (Avg ৳140/trip)')),
+                CheckboxListTile(value: r, onChanged: (v) => setM(() => r = v ?? true), title: const Text('Ride (Avg ৳85/trip)')),
+                CheckboxListTile(value: f, onChanged: (v) => setM(() => f = v ?? true), title: const Text('Food (Avg ৳85/trip)')),
+                const ListTile(
+                  leading: Icon(Icons.lock_outline, color: TwoBeeColors.textSecondary),
+                  title: Text('CNG / Car', style: TextStyle(color: TwoBeeColors.textSecondary)),
+                  subtitle: Text('Not available for bike account'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Go Online ->'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (confirmed != true) return;
+      final token = ref.read(authControllerProvider).riderRoleToken;
       await ref.read(apiClientProvider).post('/rider/panel/online', roleToken: token, body: {
-        'isOnline': goOnline,
+        'isOnline': true,
         'lat': 23.7937,
         'lng': 90.4066,
+        'services': {'parcel': p, 'ride': r, 'food': f},
       });
       final riderId = _home?['rider']?['id'] as String?;
-      if (goOnline && riderId != null) {
+      if (riderId != null) {
         ref.read(socketServiceProvider).streamRiderLocation(riderId: riderId, lat: 23.7937, lng: 90.4066);
       }
       _load();
-      if (goOnline && mounted) {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const LookingForRequestsScreen()));
-      }
+      if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => const LookingForRequestsScreen()));
+      return;
+    }
+
+    final token = ref.read(authControllerProvider).riderRoleToken;
+    try {
+      await ref.read(apiClientProvider).post('/rider/panel/online', roleToken: token, body: {
+        'isOnline': false,
+        'lat': 23.7937,
+        'lng': 90.4066,
+      });
+      _load();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
@@ -367,11 +407,12 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
                           onPressed: () async {
                             final token = ref.read(authControllerProvider).riderRoleToken;
                             await ref.read(apiClientProvider).post('/rider/panel/food/${f['id']}/accept', roleToken: token);
-                            await ref.read(apiClientProvider).post('/rider/panel/food/${f['id']}/pickup', roleToken: token);
-                            await ref.read(apiClientProvider).post('/rider/panel/food/${f['id']}/deliver', roleToken: token);
-                            _load();
+                            if (context.mounted) {
+                              await Navigator.push(context, MaterialPageRoute(builder: (_) => RiderFoodExecutionScreen(orderId: f['id'] as String)));
+                              _load();
+                            }
                           },
-                          child: Text('Run ${bdt(f['riderPayoutBdt'] as num)}'),
+                          child: Text('Accept ${bdt(f['riderPayoutBdt'] as num)}'),
                         ),
                       ),
                     )),
@@ -384,9 +425,12 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
                           onPressed: () async {
                             final token = ref.read(authControllerProvider).riderRoleToken;
                             await ref.read(apiClientProvider).post('/rider/panel/ride/${r['id']}/accept', roleToken: token);
-                            _load();
+                            if (context.mounted) {
+                              await Navigator.push(context, MaterialPageRoute(builder: (_) => RiderRideExecutionScreen(tripId: r['id'] as String)));
+                              _load();
+                            }
                           },
-                          child: Text(bdt(r['riderPayoutBdt'] as num)),
+                          child: Text('Accept ${bdt(r['riderPayoutBdt'] as num)}'),
                         ),
                       ),
                     )),
@@ -419,6 +463,32 @@ class _ParcelPickupScreenState extends ConsumerState<ParcelPickupScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Card(
+            color: TwoBeeColors.surfaceTonal,
+            child: ListTile(
+              leading: const Icon(Icons.inventory_2_outlined, color: TwoBeeColors.primary),
+              title: const Text('Front Carrier Multi-Service Setup', style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Normal parcel only · <= 8.0 kg & <= 31,500 cm3 leaves rear seat free for Zone A -> B Ride Add-On.'),
+              trailing: IconButton(
+                icon: const Icon(Icons.info_outline),
+                onPressed: () => showDialog(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('2Bee Multi-Service Carrying Rules'),
+                    content: const Text(
+                      '1. Only NORMAL parcels (no Express/Urgent, no Food).\n'
+                      '2. Parcel fits strictly in Front Carrier (<= 8.0 kg and <= 31,500 cm3).\n'
+                      '3. Matching Ride Add-On shares Zone A pickup & Zone B dropoff.\n'
+                      '4. Stop 1 drops Passenger FIRST, Stop 2 delivers Parcel SECOND.\n'
+                      '5. Isolated tracking: Client & Passenger never see each other.',
+                    ),
+                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Got It'))],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           if (!_pickedUp) ...[
             TextField(controller: _weightCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Actual Verified Weight (kg, Max 8.0 front)')),
             const SizedBox(height: 12),
@@ -451,6 +521,19 @@ class _ParcelPickupScreenState extends ConsumerState<ParcelPickupScreen> {
                 onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LookingForRequestsScreen())),
                 icon: const Icon(Icons.radar_rounded),
                 label: const Text('Check Matching Zone A → B Ride Add-ons'),
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: () => showDialog(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Multi-Service Unavailable'),
+                    content: Text(_ineligibleReason ?? 'This shipment exceeds front-carrier bounds or is not a Normal parcel-first leg.'),
+                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Understood'))],
+                  ),
+                ),
+                icon: const Icon(Icons.lock_outline),
+                label: const Text('Why Multi-Service Locked?'),
               ),
             const SizedBox(height: 16),
             TextField(controller: _pinCtrl, maxLength: 4, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Customer 4-digit Delivery PIN')),
@@ -590,9 +673,250 @@ class _MultiServiceBatchScreenState extends ConsumerState<MultiServiceBatchScree
                 final token = ref.read(authControllerProvider).riderRoleToken;
                 await ref.read(apiClientProvider).post('/rider/panel/parcel/${parcel['id']}/deliver',
                     roleToken: token, body: {'deliveryPin': _deliveryPinCtrl.text.trim(), 'codCollectedConfirm': true});
-                _load();
+                if (context.mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => BatchCompletionSummaryScreen(batch: b)),
+                  );
+                }
               },
               child: const Text('Complete Stop 2 Parcel Delivery & Finish Batch'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class BatchCompletionSummaryScreen extends StatelessWidget {
+  final Map<String, dynamic> batch;
+  const BatchCompletionSummaryScreen({super.key, required this.batch});
+
+  @override
+  Widget build(BuildContext context) {
+    final ride = batch['rideTrip'] as Map? ?? {};
+    final parcel = batch['parcelShipment'] as Map? ?? {};
+    return Scaffold(
+      appBar: AppBar(title: const Text('Batch Completed')),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const CircleAvatar(
+              radius: 36,
+              backgroundColor: TwoBeeColors.surfaceTonal,
+              child: Icon(Icons.verified_rounded, color: TwoBeeColors.primary, size: 42),
+            ),
+            const SizedBox(height: 12),
+            Text('Multi-Service Batch ${batch['batchCode']} Completed!', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            Card(
+              color: TwoBeeColors.obsidian,
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    const Text('TOTAL BATCH EARNINGS', style: TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w700, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text(bdt(batch['totalPayoutBdt'] as num), style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 8),
+                    Text('Leg 1 Ride (${ride['tripCode']}) + Leg 2 Normal Parcel (${parcel['trackingCode']})', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.check_circle_outline, color: TwoBeeColors.primary),
+                title: Text('Front Carrier Emptied & Rear Pillion Free'),
+                subtitle: Text('Ready for next single or multi-service dispatch.'),
+              ),
+            ),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LookingForRequestsScreen())),
+              child: const Text('Find Next Request (Stay Online) ->'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
+              child: const Text('Take a Break (Rider Home)'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class RiderFoodExecutionScreen extends ConsumerStatefulWidget {
+  final String orderId;
+  const RiderFoodExecutionScreen({super.key, required this.orderId});
+
+  @override
+  ConsumerState<RiderFoodExecutionScreen> createState() => _RiderFoodExecutionScreenState();
+}
+
+class _RiderFoodExecutionScreenState extends ConsumerState<RiderFoodExecutionScreen> {
+  Map<String, dynamic>? _order;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final token = ref.read(authControllerProvider).riderRoleToken;
+    setState(() => _loading = true);
+    try {
+      final res = await ref.read(apiClientProvider).get('/rider/panel/food/${widget.orderId}', roleToken: token);
+      setState(() => _order = Map<String, dynamic>.from(res['order'] as Map));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _order == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final o = _order!;
+    final status = o['status'] as String;
+    return Scaffold(
+      appBar: AppBar(title: Text('Food Delivery ${o['orderCode']}')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: TwoBeeColors.surfaceTonal,
+            child: ListTile(
+              title: Text('Status: $status', style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+              subtitle: Text('Pickup: ${o['merchant']?['businessName']}\nDropoff: ${o['deliveryAddress']}\nPayment: ${o['paymentMethod']} · Total ${bdt(o['totalBdt'] as num)}'),
+              isThreeLine: true,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              title: Text('Customer: ${o['user']?['fullName'] ?? ''}'),
+              trailing: IconButton(
+                icon: const Icon(Icons.chat_outlined, color: TwoBeeColors.primary),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InAppChatScreen(
+                      serviceType: 'FOOD',
+                      orderId: widget.orderId,
+                      peerTitle: o['user']?['fullName']?.toString() ?? 'Customer',
+                      senderRole: 'RIDER',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          if (status != 'PICKED_UP' && status != 'DELIVERED')
+            ElevatedButton(
+              onPressed: () async {
+                final token = ref.read(authControllerProvider).riderRoleToken;
+                await ref.read(apiClientProvider).post('/rider/panel/food/${widget.orderId}/pickup', roleToken: token);
+                _load();
+              },
+              child: const Text('Confirm Picked Up from Restaurant'),
+            )
+          else if (status == 'PICKED_UP')
+            ElevatedButton(
+              onPressed: () async {
+                final token = ref.read(authControllerProvider).riderRoleToken;
+                await ref.read(apiClientProvider).post('/rider/panel/food/${widget.orderId}/deliver', roleToken: token);
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: Text('Complete Delivery & Collect (${bdt(o['riderPayoutBdt'] as num)} Payout)'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class RiderRideExecutionScreen extends ConsumerStatefulWidget {
+  final String tripId;
+  const RiderRideExecutionScreen({super.key, required this.tripId});
+
+  @override
+  ConsumerState<RiderRideExecutionScreen> createState() => _RiderRideExecutionScreenState();
+}
+
+class _RiderRideExecutionScreenState extends ConsumerState<RiderRideExecutionScreen> {
+  Map<String, dynamic>? _trip;
+  final _pinCtrl = TextEditingController();
+  bool _loading = true;
+  String? _err;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final token = ref.read(authControllerProvider).riderRoleToken;
+    setState(() => _loading = true);
+    try {
+      final res = await ref.read(apiClientProvider).get('/rider/panel/ride/${widget.tripId}', roleToken: token);
+      setState(() => _trip = Map<String, dynamic>.from(res['trip'] as Map));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _trip == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final t = _trip!;
+    final status = t['status'] as String;
+    return Scaffold(
+      appBar: AppBar(title: Text('Ride ${t['tripCode']}')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: TwoBeeColors.surfaceTonal,
+            child: ListTile(
+              title: Text('Status: $status', style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+              subtitle: Text('${t['pickupAddress']} → ${t['dropoffAddress']}\nPassenger: ${t['user']?['fullName'] ?? ''} · Fare ${bdt(t['totalFareBdt'] as num)} (PIN: ${t['startPin']})'),
+              isThreeLine: true,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (status == 'RIDER_ASSIGNED') ...[
+            TextField(controller: _pinCtrl, maxLength: 4, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Enter Passenger 4-Digit Start PIN')),
+            if (_err != null) Text(_err!, style: const TextStyle(color: TwoBeeColors.errorText)),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  final token = ref.read(authControllerProvider).riderRoleToken;
+                  await ref.read(apiClientProvider).post('/rider/panel/ride/${widget.tripId}/start', roleToken: token, body: {'startPin': _pinCtrl.text.trim()});
+                  _load();
+                } catch (e) {
+                  setState(() => _err = e.toString());
+                }
+              },
+              child: const Text('Start Ride Trip ->'),
+            ),
+          ] else if (status == 'ON_TRIP') ...[
+            ElevatedButton(
+              onPressed: () async {
+                final token = ref.read(authControllerProvider).riderRoleToken;
+                await ref.read(apiClientProvider).post('/rider/panel/ride/${widget.tripId}/complete', roleToken: token);
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: Text('Complete Dropoff (${bdt(t['riderPayoutBdt'] as num)} Payout)'),
             ),
           ],
         ],
@@ -610,6 +934,8 @@ class _RiderJobsTab extends ConsumerStatefulWidget {
 
 class _RiderJobsTabState extends ConsumerState<_RiderJobsTab> {
   bool _showLive = true;
+  String _cat = 'ALL';
+  String _query = '';
   Map<String, dynamic>? _jobs;
   bool _loading = true;
 
@@ -631,20 +957,39 @@ class _RiderJobsTabState extends ConsumerState<_RiderJobsTab> {
     }
   }
 
+  bool _matchesQuery(Map m, List<String> keys) {
+    if (_query.isEmpty) return true;
+    final q = _query.toLowerCase();
+    return keys.any((k) => (m[k]?.toString() ?? '').toLowerCase().contains(q));
+  }
+
   @override
   Widget build(BuildContext context) {
     final bucket = (_jobs?[_showLive ? 'live' : 'completed'] as Map?) ?? {};
-    final batches = (bucket['multiServiceBatches'] as List?) ?? [];
-    final parcels = (bucket['parcels'] as List?) ?? [];
-    final food = (bucket['food'] as List?) ?? [];
-    final rides = (bucket['rides'] as List?) ?? [];
+    final allBatches = (bucket['multiServiceBatches'] as List?) ?? [];
+    final allParcels = (bucket['parcels'] as List?) ?? [];
+    final allFood = (bucket['food'] as List?) ?? [];
+    final allRides = (bucket['rides'] as List?) ?? [];
+
+    final batches = (_cat == 'ALL' || _cat == 'MULTI')
+        ? allBatches.where((b) => _matchesQuery(b as Map, ['batchCode', 'originZoneId', 'destinationZoneId', 'status'])).toList()
+        : [];
+    final parcels = (_cat == 'ALL' || _cat == 'PARCEL')
+        ? allParcels.where((p) => _matchesQuery(p as Map, ['trackingCode', 'pickupAddress', 'dropoffAddress', 'status'])).toList()
+        : [];
+    final food = (_cat == 'ALL' || _cat == 'FOOD')
+        ? allFood.where((f) => _matchesQuery(f as Map, ['orderCode', 'deliveryAddress', 'status'])).toList()
+        : [];
+    final rides = (_cat == 'ALL' || _cat == 'RIDE')
+        ? allRides.where((r) => _matchesQuery(r as Map, ['tripCode', 'pickupAddress', 'dropoffAddress', 'status'])).toList()
+        : [];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Service History'), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
             child: SegmentedButton<bool>(
               segments: const [
                 ButtonSegment(value: true, label: Text('Live')),
@@ -652,6 +997,33 @@ class _RiderJobsTabState extends ConsumerState<_RiderJobsTab> {
               ],
               selected: {_showLive},
               onSelectionChanged: (v) => setState(() => _showLive = v.first),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            child: TextField(
+              onChanged: (v) => setState(() => _query = v.trim()),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search tracking code, trip code, zone...',
+                isDense: true,
+              ),
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            child: Row(
+              children: ['ALL', 'MULTI', 'PARCEL', 'FOOD', 'RIDE'].map((c) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(c == 'MULTI' ? 'Multi-Service' : c[0] + c.substring(1).toLowerCase()),
+                    selected: _cat == c,
+                    onSelected: (_) => setState(() => _cat = c),
+                  ),
+                );
+              }).toList(),
             ),
           ),
           Expanded(
@@ -673,29 +1045,32 @@ class _RiderJobsTabState extends ConsumerState<_RiderJobsTab> {
                       ...parcels.map((p) => Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
-                              title: Text('Parcel ${p['trackingCode']}'),
-                              subtitle: Text('${p['pickupAddress']} → ${p['dropoffAddress']}'),
+                              title: Text('Parcel ${p['trackingCode']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                              subtitle: Text('${p['pickupAddress']} → ${p['dropoffAddress']} · ${p['status']}'),
                               trailing: Text(bdt(p['riderPayoutBdt'] as num)),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParcelPickupScreen(parcelId: p['id'] as String))),
                             ),
                           )),
                       ...food.map((f) => Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
-                              title: Text('Food ${f['orderCode']}'),
+                              title: Text('Food ${f['orderCode']}', style: const TextStyle(fontWeight: FontWeight.w700)),
                               subtitle: Text('${f['merchant']?['businessName'] ?? ''} · ${f['status']}'),
                               trailing: Text(bdt(f['riderPayoutBdt'] as num)),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RiderFoodExecutionScreen(orderId: f['id'] as String))),
                             ),
                           )),
                       ...rides.map((r) => Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
-                              title: Text('Ride ${r['tripCode']}'),
-                              subtitle: Text('${r['pickupAddress']} → ${r['dropoffAddress']}'),
+                              title: Text('Ride ${r['tripCode']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                              subtitle: Text('${r['pickupAddress']} → ${r['dropoffAddress']} · ${r['status']}'),
                               trailing: Text(bdt(r['riderPayoutBdt'] as num)),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RiderRideExecutionScreen(tripId: r['id'] as String))),
                             ),
                           )),
                       if (batches.isEmpty && parcels.isEmpty && food.isEmpty && rides.isEmpty)
-                        const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No jobs in this tab yet.'))),
+                        const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No jobs matching filter in this tab.'))),
                     ],
                   ),
           ),
@@ -956,7 +1331,9 @@ class BikeRentalHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _BikeRentalHomeScreenState extends ConsumerState<BikeRentalHomeScreen> {
+  Map<String, dynamic>? _activeRental;
   List<dynamic> _bikes = [];
+  bool _loading = true;
 
   @override
   void initState() {
@@ -966,28 +1343,74 @@ class _BikeRentalHomeScreenState extends ConsumerState<BikeRentalHomeScreen> {
 
   Future<void> _load() async {
     final token = ref.read(authControllerProvider).riderRoleToken;
-    final res = await ref.read(apiClientProvider).get('/rider/panel/rentals', roleToken: token);
-    if (mounted) setState(() => _bikes = (res['fleetBikes'] as List?) ?? []);
+    setState(() => _loading = true);
+    try {
+      final res = await ref.read(apiClientProvider).get('/rider/panel/rentals', roleToken: token);
+      if (mounted) {
+        setState(() {
+          _activeRental = res['activeRental'] as Map<String, dynamic>?;
+          _bikes = (res['fleetBikes'] as List?) ?? [];
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _rentBike(String bikeId) async {
+    final token = ref.read(authControllerProvider).riderRoleToken;
+    try {
+      await ref.read(apiClientProvider).post('/rider/panel/rentals/book', roleToken: token, body: {'bikeId': bikeId, 'planType': 'DAILY'});
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('EV Rental activated cleanly!')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('2Bee EV Bike Rental')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: _bikes
-            .map((b) => Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    leading: const Icon(Icons.electric_moped_rounded, color: TwoBeeColors.primary, size: 32),
-                    title: Text(b['modelName'].toString(), style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: Text('${b['hubName']} · ${b['rangeKm']}km range · ${b['availableQty']} available'),
-                    trailing: Text('${bdt(b['dailyRateBdt'] as num)}/day', style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (_activeRental != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(color: TwoBeeColors.obsidian, borderRadius: BorderRadius.circular(16)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('ACTIVE RENTAL', style: TextStyle(color: TwoBeeColors.primarySoft, fontSize: 11, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 4),
+                        Text(_activeRental!['bikeModel'].toString(), style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                        Text('${_activeRental!['hubName']} · ${_activeRental!['plateNo']}', style: const TextStyle(color: Colors.white70)),
+                        const SizedBox(height: 6),
+                        Text('Plan: ${bdt(_activeRental!['dailyRateBdt'] ?? 250)}/day', style: const TextStyle(color: TwoBeeColors.primarySoft)),
+                      ],
+                    ),
                   ),
-                ))
-            .toList(),
-      ),
+                  const SizedBox(height: 16),
+                ],
+                const Text('Available 2Bee EVs for Rent', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                const SizedBox(height: 8),
+                ..._bikes.map((b) => Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: ListTile(
+                        leading: const Icon(Icons.electric_moped_rounded, color: TwoBeeColors.primary, size: 32),
+                        title: Text(b['modelName'].toString(), style: const TextStyle(fontWeight: FontWeight.w800)),
+                        subtitle: Text('${b['hubName']} · ${b['rangeKm']}km range · ${bdt(b['dailyRateBdt'] as num)}/day'),
+                        trailing: FilledButton(
+                          onPressed: () => _rentBike(b['id'] as String),
+                          child: const Text('Rent'),
+                        ),
+                      ),
+                    )),
+              ],
+            ),
     );
   }
 }
@@ -1002,9 +1425,30 @@ class RiderSecurityScreen extends ConsumerStatefulWidget {
 class _RiderSecurityScreenState extends ConsumerState<RiderSecurityScreen> {
   final _cur = TextEditingController();
   final _next = TextEditingController();
+  final _otpCtrl = TextEditingController();
+  final _payoutNoCtrl = TextEditingController();
+  final _holderCtrl = TextEditingController();
+  String _provider = 'BKASH';
+  Map<String, dynamic>? _secData;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final token = ref.read(authControllerProvider).riderRoleToken;
+    if (token == null) return;
+    final res = await ref.read(apiClientProvider).get('/rider/panel/security', roleToken: token);
+    if (mounted) setState(() => _secData = res);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final payout = _secData?['payoutAccount'] as Map?;
+    final devices = (_secData?['devices'] as List?) ?? [];
+
     return Scaffold(
       appBar: AppBar(title: const Text('Rider Security (4-Digit PIN)')),
       body: ListView(
@@ -1018,11 +1462,21 @@ class _RiderSecurityScreenState extends ConsumerState<RiderSecurityScreen> {
               subtitle: Text('Payout method updates require SMS OTP + 48-hour hold.'),
             ),
           ),
+          if (payout?['pendingEffectiveAt'] != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: VerificationBanner(
+                title: '48-Hour Payout Hold Active',
+                subtitle: 'Pending change takes effect at ${payout!['pendingEffectiveAt']}',
+              ),
+            ),
           const SizedBox(height: 14),
+          const Text('Change 4-Digit Passcode', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
           TextField(controller: _cur, maxLength: 4, obscureText: true, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Current 4-digit PIN')),
           const SizedBox(height: 8),
           TextField(controller: _next, maxLength: 4, obscureText: true, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'New 4-digit PIN')),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           ElevatedButton(
             onPressed: () async {
               final token = ref.read(authControllerProvider).riderRoleToken;
@@ -1034,6 +1488,69 @@ class _RiderSecurityScreenState extends ConsumerState<RiderSecurityScreen> {
             },
             child: const Text('Update 4-Digit Passcode'),
           ),
+          const SizedBox(height: 20),
+          const Text('Request Payout Change (SMS OTP + 48h Hold)', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () async {
+              final phone = ref.read(authControllerProvider).user?['phone'] as String;
+              final res = await ref.read(apiClientProvider).post('/auth/otp/request', body: {'phone': phone, 'purpose': 'PAYOUT_CHANGE'});
+              if (res['devOtpHint'] != null) _otpCtrl.text = res['devOtpHint'] as String;
+              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SMS OTP requested')));
+            },
+            child: const Text('Send Payout Verification OTP'),
+          ),
+          const SizedBox(height: 8),
+          TextField(controller: _otpCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6-digit SMS OTP')),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: _provider,
+            decoration: const InputDecoration(labelText: 'New Provider'),
+            items: const [
+              DropdownMenuItem(value: 'BKASH', child: Text('bKash')),
+              DropdownMenuItem(value: 'NAGAD', child: Text('Nagad')),
+              DropdownMenuItem(value: 'ROCKET', child: Text('Rocket')),
+              DropdownMenuItem(value: 'BANK_BEFTN', child: Text('Bank BEFTN')),
+            ],
+            onChanged: (v) => setState(() => _provider = v ?? 'BKASH'),
+          ),
+          const SizedBox(height: 8),
+          TextField(controller: _payoutNoCtrl, decoration: const InputDecoration(labelText: 'New Wallet / Account Number')),
+          const SizedBox(height: 8),
+          TextField(controller: _holderCtrl, decoration: const InputDecoration(labelText: 'Holder Name (Match NID)')),
+          const SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: () async {
+              final token = ref.read(authControllerProvider).riderRoleToken;
+              await ref.read(apiClientProvider).post('/rider/panel/payout/change-request', roleToken: token, body: {
+                'otpCode': _otpCtrl.text.trim(),
+                'provider': _provider,
+                'accountNumber': _payoutNoCtrl.text.trim(),
+                'holderName': _holderCtrl.text.trim(),
+              });
+              _load();
+              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Submitted! 48-hour hold applied.')));
+            },
+            child: const Text('Submit Payout Change (48h Hold)'),
+          ),
+          if (devices.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            const Text('Authorized Devices', style: TextStyle(fontWeight: FontWeight.w800)),
+            ...devices.map((d) => Card(
+                  margin: const EdgeInsets.only(top: 8),
+                  child: ListTile(
+                    title: Text(d['deviceName'].toString()),
+                    trailing: TextButton(
+                      onPressed: () async {
+                        final token = ref.read(authControllerProvider).riderRoleToken;
+                        await ref.read(apiClientProvider).delete('/rider/panel/security/devices/${d['id']}', roleToken: token);
+                        _load();
+                      },
+                      child: const Text('Remove'),
+                    ),
+                  ),
+                )),
+          ],
         ],
       ),
     );

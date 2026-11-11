@@ -137,6 +137,7 @@ class ApiClient {
         );
 
   Options _opts({String? roleToken}) {
+    dio.options.baseUrl = AppConfig.apiBaseUrl;
     final s = ref.read(authControllerProvider);
     final headers = <String, dynamic>{};
     if (s.accessToken != null) headers['Authorization'] = 'Bearer ${s.accessToken}';
@@ -207,6 +208,7 @@ class AuthController extends StateNotifier<AuthSessionState> {
   }
 
   Future<void> init() async {
+    await AppConfig.loadSavedHost();
     final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getBool('twobee_onboarding_seen') ?? false;
     final token = prefs.getString('twobee_access_token');

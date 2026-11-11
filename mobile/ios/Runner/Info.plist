@@ -7,7 +7,22 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Twobee App</string>
+	<string>2Bee</string>
+	<key>NSCameraUsageDescription</key>
+	<string>2Bee uses the camera to capture KYC selfies, parcel loading photos, and delivery proofs.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>2Bee uses your photo library to upload KYC documents and restaurant menu images.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>2Bee uses your location for pickup matching, live tracking, and dispatch radar.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID to quickly unlock your Rider or Merchant security passcode.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>2Bee connects to your local development server on the same Wi-Fi network.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
