@@ -1,0 +1,702 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  CLIENT
+  RIDER
+  MERCHANT
+}
+
+enum KycStatus {
+  DRAFT
+  PENDING
+  NEEDS_CHANGES
+  APPROVED
+  REJECTED
+}
+
+enum MerchantType {
+  PHYSICAL
+  HOME_KITCHEN
+}
+
+enum VehicleOwnership {
+  OWN
+  RENTAL
+}
+
+enum PowertrainType {
+  PETROL
+  ELECTRIC
+}
+
+enum RentalPlanType {
+  DAILY
+  WEEKLY
+  RENT_TO_OWN
+}
+
+enum PaymentMethodType {
+  COD
+  STRIPE_SANDBOX
+  WALLET
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ServiceType {
+  FOOD
+  PARCEL
+  RIDE
+}
+
+enum ParcelTier {
+  NORMAL_ECO
+  NEXT_DAY
+  EXPRESS
+}
+
+enum FoodOrderStatus {
+  PLACED
+  ACCEPTED
+  PREPARING
+  READY_FOR_PICKUP
+  PICKED_UP
+  DELIVERED
+  REJECTED
+  CANCELLED
+}
+
+enum RideStatus {
+  MATCHING
+  RIDER_ASSIGNED
+  ARRIVED_PICKUP
+  ON_TRIP
+  COMPLETED
+  CANCELLED
+}
+
+enum ParcelStatus {
+  BOOKED
+  MATCHING
+  RIDER_ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum MultiServiceStatus {
+  PARCEL_ACTIVE
+  PASSENGER_PICKUP_PENDING
+  PASSENGER_ONBOARD
+  PASSENGER_DROPPED
+  COMPLETED
+  CANCELLED
+}
+
+model Zone {
+  id           String   @id
+  name         String   @unique
+  city         String   @default("Dhaka")
+  centerLat    Float
+  centerLng    Float
+  radiusKm     Float    @default(3.5)
+  h3BaseIndex  String?  // Future Uber H3 bucket mapping
+  rateBonusBdt Float    @default(0)
+  createdAt    DateTime @default(now())
+}
+
+model User {
+  id              String   @id @default(cuid())
+  phone           String   @unique
+  fullName        String   @default("2Bee User")
+  email           String?
+  avatarUrl       String?
+  activeRole      UserRole @default(CLIENT)
+  lastActiveAt    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  riderProfile    RiderProfile?
+  merchantProfile MerchantProfile?
+  savedAddresses  SavedAddress[]
+  favorites       FavoriteEntry[]
+  walletAccounts  WalletAccount[]
+  foodOrders      FoodOrder[]
+  rideTrips       RideTrip[]
+  parcelsSent     ParcelShipment[]
+  notifications   NotificationItem[]
+  sosIncidents    SosIncident[]
+  reviewsGiven    Review[]
+}
+
+model OtpChallenge {
+  id         String    @id @default(cuid())
+  phone      String
+  purpose    String    // LOGIN | FORGOT_PASSCODE | MERCHANT_APPROVAL_PIN | PAYOUT_CHANGE
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, purpose])
+}
+
+model RiderProfile {
+  id                    String           @id @default(cuid())
+  userId                String           @unique
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kycStatus             KycStatus        @default(PENDING)
+  kycNotesJson          Json?
+  passcodeHash          String           // 4-digit passcode created AT registration Step 8
+  biometricEnabled      Boolean          @default(false)
+  dob                   String?
+  gender                String?
+  preferredZoneId       String?
+  emergencyName         String?
+  emergencyRelation     String?
+  emergencyPhone        String?
+  nidNumber             String
+  licenseNumber         String?
+  licenseExpiry         String?
+  vehicleOwnership      VehicleOwnership @default(OWN)
+  powertrain            PowertrainType   @default(PETROL)
+  vehicleBrandModel     String?
+  plateNo               String?
+  frontCarrierVerified  Boolean          @default(false)
+  frontCarrierLengthCm  Float?           @default(35)
+  frontCarrierWidthCm   Float?           @default(30)
+  frontCarrierHeightCm  Float?           @default(30)
+  frontCarrierMaxKg     Float            @default(8.0)
+  rearCarrierVerified   Boolean          @default(false)
+  rearCarrierMaxKg      Float            @default(15.0)
+  multiServiceEnabled   Boolean          @default(false)
+  spareHelmetConfirmed  Boolean          @default(false)
+  isOnline              Boolean          @default(false)
+  activeServicesJson    Json             @default("{\"food\":true,\"parcel\":true,\"ride\":true}")
+  currentLat            Float?
+  currentLng            Float?
+  rating                Float            @default(4.9)
+  acceptanceRate        Float            @default(98.4)
+  completionRate        Float            @default(99.1)
+  totalTrips            Int              @default(0)
+  approvedAt            DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  rentals               BikeRental[]
+  foodOrders            FoodOrder[]
+  rideTrips             RideTrip[]
+  parcelShipments       ParcelShipment[]
+  multiServiceBatches   MultiServiceBatch[]
+  codLedgerEntries      CodLedger[]
+}
+
+model MerchantProfile {
+  id                  String       @id @default(cuid())
+  userId              String       @unique
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchantType        MerchantType @default(PHYSICAL)
+  kycStatus           KycStatus    @default(PENDING)
+  kycNotesJson        Json?
+  // 6-digit passcode NOT set at registration; mandatory on first login AFTER approval!
+  passcodeHash        String?
+  passcodeSet         Boolean      @default(false)
+  biometricEnabled    Boolean      @default(false)
+  businessName        String
+  ownerOrCookName     String
+  cuisinesJson        Json         @default("[]")
+  address             String
+  lat                 Float        @default(23.7937)
+  lng                 Float        @default(90.4066)
+  areaZoneId          String
+  contactPhone        String
+  contactEmail        String?
+  eTin                String?
+  tradeLicenseNo      String?
+  nidNumber           String
+  fbPageUrl           String?
+  fbVerifyToken       String?
+  hoursJson           Json         @default("{}")
+  avgPrepMins         Int          @default(25)
+  dailyOrderLimit     Int?         @default(15) // Home Kitchen quota
+  dailyCutoffTime     String?      @default("20:00") // Home Kitchen cutoff HH:mm
+  hygieneConfirmed    Boolean      @default(false)
+  hygieneScore        Float        @default(4.9)
+  isStoreOpen         Boolean      @default(false)
+  pausedUntil         DateTime?
+  rating              Float        @default(4.8)
+  reviewCount         Int          @default(0)
+  coverImageUrl       String?
+  deliveryFeeBdt      Float        @default(45)
+  minOrderBdt         Float        @default(150)
+  approvedAt          DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  categories          MenuCategory[]
+  menuItems           MenuItem[]
+  promotions          Promotion[]
+  reviews             Review[]
+  orders              FoodOrder[]
+  staffAccounts       MerchantStaff[]
+}
+
+model MerchantStaff {
+  id         String          @id @default(cuid())
+  merchantId String
+  merchant   MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  name       String
+  phone      String
+  roleLabel  String          @default("Kitchen Manager")
+  isActive   Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+}
+
+model VerificationDocument {
+  id              String   @id @default(cuid())
+  ownerRole       UserRole
+  ownerId         String
+  docType         String   // NID_FRONT | NID_BACK | LICENSE_FRONT | LICENSE_BACK | SELFIE | TRADE_LICENSE | STOREFRONT | KITCHEN | DISH_SAMPLE | CARRIER_FRONT | CARRIER_REAR
+  fileUrl         String
+  status          String   @default("PENDING") // PENDING | APPROVED | NEEDS_CHANGES
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+
+  @@index([ownerRole, ownerId])
+}
+
+model PayoutAccount {
+  id                 String    @id @default(cuid())
+  ownerRole          UserRole
+  ownerId            String
+  provider           String    // BKASH | NAGAD | ROCKET | BANK_BEFTN
+  walletAccountType  String    @default("PERSONAL") // PERSONAL | MERCHANT
+  accountNumber      String
+  holderName         String
+  instantCashoutOn   Boolean   @default(true)
+  pendingPayloadJson Json?     // Pending change locked during 48h hold
+  pendingEffectiveAt DateTime? // Must wait 48h after OTP confirmation
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([ownerRole, ownerId])
+}
+
+model ActiveDevice {
+  id          String   @id @default(cuid())
+  ownerRole   UserRole
+  ownerId     String
+  deviceName  String
+  deviceKey   String
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([ownerRole, ownerId])
+}
+
+model FleetBike {
+  id           String   @id @default(cuid())
+  modelName    String   // e.g. 2Bee EV GFR-02, 2Bee EV LOM, 2Bee Livo EV
+  hubName      String
+  powertrain   String   @default("ELECTRIC")
+  rangeKm      Int      @default(60)
+  dailyRateBdt Float    @default(250)
+  weeklyRateBdt Float   @default(1500)
+  availableQty Int      @default(5)
+  frontMaxKg   Float    @default(8.0)
+  rearMaxKg    Float    @default(15.0)
+  rating       Float    @default(4.9)
+  imageUrl     String?
+}
+
+model BikeRental {
+  id           String         @id @default(cuid())
+  riderId      String
+  rider        RiderProfile   @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  bikeId       String
+  bikeModel    String
+  plateNo      String
+  hubName      String
+  planType     RentalPlanType @default(DAILY)
+  dailyRateBdt Float          @default(250)
+  status       String         @default("ACTIVE")
+  dayIndex     Int            @default(1)
+  totalDays    Int            @default(7)
+  nextDebitAt  DateTime
+  createdAt    DateTime       @default(now())
+}
+
+model MenuCategory {
+  id         String          @id @default(cuid())
+  merchantId String
+  merchant   MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  name       String
+  sortOrder  Int             @default(0)
+  items      MenuItem[]
+}
+
+model MenuItem {
+  id               String          @id @default(cuid())
+  merchantId       String
+  merchant         MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  categoryId       String
+  category         MenuCategory    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  priceBdt         Float
+  strikePriceBdt   Float?
+  prepTimeMins     Int             @default(15)
+  imageUrl         String?
+  isBestseller     Boolean         @default(false)
+  inStock          Boolean         @default(true)
+  availableTonight Boolean         @default(true) // Used in Home Kitchen split panel
+  dailyStockCap    Int?
+  optionGroupsJson Json            @default("[]") // [{title, required, maxSelect, options:[{id, name, extraBdt}]}]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+model Promotion {
+  id                String          @id @default(cuid())
+  merchantId        String
+  merchant          MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  title             String
+  promoCode         String
+  discountType      String          // PERCENTAGE | FLAT_BDT | FREE_DELIVERY
+  discountValue     Float
+  minOrderBdt       Float           @default(0)
+  isActive          Boolean         @default(true)
+  startsAt          DateTime        @default(now())
+  endsAt            DateTime
+  createdAt         DateTime        @default(now())
+}
+
+model Review {
+  id           String          @id @default(cuid())
+  merchantId   String?
+  merchant     MerchantProfile? @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceType  ServiceType
+  orderId      String
+  rating       Int
+  riderRating  Int?
+  tagsJson     Json            @default("[]")
+  comment      String?
+  merchantReply String?
+  repliedAt    DateTime?
+  createdAt    DateTime        @default(now())
+}
+
+model SavedAddress {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String   // Home | Work | Airport | Custom
+  address   String
+  zoneId    String
+  lat       Float
+  lng       Float
+  createdAt DateTime @default(now())
+}
+
+model FavoriteEntry {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetType String   // RESTAURANT | DISH
+  targetId   String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, targetType, targetId])
+}
+
+model FoodOrder {
+  id                String            @id @default(cuid())
+  orderCode         String            @unique
+  userId            String
+  user              User              @relation(fields: [userId], references: [id])
+  merchantId        String
+  merchant          MerchantProfile   @relation(fields: [merchantId], references: [id])
+  riderId           String?
+  rider             RiderProfile?     @relation(fields: [riderId], references: [id])
+  status            FoodOrderStatus   @default(PLACED)
+  paymentMethod     PaymentMethodType @default(COD)
+  paymentStatus     PaymentStatus     @default(PENDING)
+  stripeIntentId    String?
+  deliveryAddress   String
+  deliveryZoneId    String
+  deliveryLat       Float
+  deliveryLng       Float
+  scheduleMode      String            @default("NOW") // NOW | SCHEDULED
+  scheduledFor      DateTime?
+  cookingNote       String?
+  riderNote         String?
+  promoCode         String?
+  subtotalBdt       Float
+  deliveryFeeBdt    Float
+  packagingFeeBdt   Float             @default(15)
+  serviceFeeBdt     Float             @default(10)
+  discountBdt       Float             @default(0)
+  commissionBdt     Float
+  totalBdt          Float
+  riderPayoutBdt    Float             @default(85)
+  prepTimeMins      Int               @default(20)
+  rejectReason      String?
+  acceptExpiresAt   DateTime?
+  deliveryPin       String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  items             FoodOrderItem[]
+}
+
+model FoodOrderItem {
+  id                  String    @id @default(cuid())
+  orderId             String
+  order               FoodOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId          String
+  itemName            String
+  unitPriceBdt        Float
+  quantity            Int
+  selectedOptionsJson Json      @default("[]")
+  lineTotalBdt        Float
+}
+
+model RideTrip {
+  id                  String            @id @default(cuid())
+  tripCode            String            @unique
+  userId              String
+  user                User              @relation(fields: [userId], references: [id])
+  riderId             String?
+  rider               RiderProfile?     @relation(fields: [riderId], references: [id])
+  fleetTier           String            // 2BEE_EV_SOLO | ECO_AUTO | COMFORT_SEDAN
+  pickupAddress       String
+  pickupZoneId        String
+  pickupLat           Float
+  pickupLng           Float
+  dropoffAddress      String
+  dropoffZoneId       String
+  dropoffLat          Float
+  dropoffLng          Float
+  distanceKm          Float
+  etaMins             Int
+  status              RideStatus        @default(MATCHING)
+  paymentMethod       PaymentMethodType @default(COD)
+  paymentStatus       PaymentStatus     @default(PENDING)
+  stripeIntentId      String?
+  promoCode           String?
+  baseFareBdt         Float
+  distanceFareBdt     Float
+  discountBdt         Float             @default(0)
+  totalFareBdt        Float
+  riderPayoutBdt      Float
+  startPin            String
+  tipBdt              Float             @default(0)
+  rating              Int?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  multiServiceBatch   MultiServiceBatch?
+}
+
+model ParcelShipment {
+  id                  String            @id @default(cuid())
+  trackingCode        String            @unique
+  userId              String
+  user                User              @relation(fields: [userId], references: [id])
+  riderId             String?
+  rider               RiderProfile?     @relation(fields: [riderId], references: [id])
+  tier                ParcelTier        @default(NORMAL_ECO)
+  packageSizeClass    String            @default("MEDIUM") // DOC | SMALL | MEDIUM | LARGE
+  category            String
+  weightKg            Float
+  lengthCm            Float             @default(30)
+  widthCm             Float             @default(20)
+  heightCm            Float             @default(15)
+  volumeCm3           Float             @default(9000)
+  declaredValueBdt    Float             @default(0)
+  isProtected         Boolean           @default(false)
+  protectionFeeBdt    Float             @default(0)
+  handlingNote        String?
+  senderName          String
+  senderPhone         String
+  pickupAddress       String
+  originZoneId        String
+  pickupLat           Float
+  pickupLng           Float
+  recipientName       String
+  recipientPhone      String
+  dropoffAddress      String
+  destinationZoneId   String
+  dropoffLat          Float
+  dropoffLng          Float
+  distanceKm          Float
+  status              ParcelStatus      @default(BOOKED)
+  paymentMethod       PaymentMethodType @default(COD)
+  paymentStatus       PaymentStatus     @default(PENDING)
+  stripeIntentId      String?
+  deliveryChargeBdt   Float
+  codCollectBdt       Float             @default(0) // Goods value COD if any
+  riderPayoutBdt      Float
+  deliveryPin         String
+  pickupPhotoUrl      String?
+  deliveryPhotoUrl    String?
+  fitsFrontCarrier    Boolean           @default(false)
+  tipBdt              Float             @default(0)
+  rating              Int?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  multiServiceBatch   MultiServiceBatch?
+}
+
+model MultiServiceBatch {
+  id                  String             @id @default(cuid())
+  batchCode           String             @unique
+  riderId             String
+  rider               RiderProfile       @relation(fields: [riderId], references: [id])
+  parcelShipmentId    String             @unique
+  parcelShipment      ParcelShipment     @relation(fields: [parcelShipmentId], references: [id])
+  rideTripId          String             @unique
+  rideTrip            RideTrip           @relation(fields: [rideTripId], references: [id])
+  originZoneId        String             // Zone A
+  destinationZoneId   String             // Zone B
+  status              MultiServiceStatus @default(PASSENGER_PICKUP_PENDING)
+  passengerDroppedAt  DateTime?
+  parcelDeliveredAt   DateTime?
+  helmetReturnedOk    Boolean            @default(false)
+  curbDismountOk      Boolean            @default(false)
+  totalPayoutBdt      Float
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model WalletAccount {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role             UserRole
+  balanceBdt       Float    @default(0)
+  pendingHoldBdt   Float    @default(0)
+  codCashInHandBdt Float    @default(0) // Rider COD collected cash liability
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  transactions     WalletTransaction[]
+
+  @@unique([userId, role])
+}
+
+model WalletTransaction {
+  id              String        @id @default(cuid())
+  walletId        String
+  wallet          WalletAccount @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type            String        // TOPUP | EARNING | COMMISSION | RENTAL_DEDUCTION | WITHDRAWAL | REFUND | BONUS | COD_OFFSET
+  amountBdt       Float         // Signed (+ credit, - debit)
+  referenceCode   String
+  description     String
+  status          String        @default("SETTLED")
+  createdAt       DateTime      @default(now())
+}
+
+model CodLedger {
+  id              String       @id @default(cuid())
+  riderId         String
+  rider           RiderProfile @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  serviceType     ServiceType
+  orderId         String
+  cashCollectedBdt Float
+  settled         Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+}
+
+model ChatThread {
+  id          String        @id @default(cuid())
+  serviceType ServiceType
+  orderId     String        @unique
+  clientId    String
+  riderId     String?
+  createdAt   DateTime      @default(now())
+  messages    ChatMessage[]
+}
+
+model ChatMessage {
+  id        String     @id @default(cuid())
+  threadId  String
+  thread    ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId  String
+  senderRole UserRole
+  body      String
+  createdAt DateTime   @default(now())
+}
+
+model NotificationItem {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       UserRole
+  category   String   // ORDERS | OFFERS | REQUESTS | WALLET | SYSTEM
+  title      String
+  body       String
+  actionRoute String?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model SosIncident {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  role        UserRole
+  orderId     String?
+  lat         Float
+  lng         Float
+  note        String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actorRole  String
+  action     String
+  entityType String
+  entityId   String
+  metaJson   Json?
+  createdAt  DateTime @default(now())
+}
+
+model AppPricingConfig {
+  id                    String   @id @default("default")
+  foodCommissionRate    Float    @default(0.15)
+  foodDeliveryFeeBdt    Float    @default(45)
+  foodPackagingFeeBdt   Float    @default(15)
+  foodServiceFeeBdt     Float    @default(10)
+  rideBaseFareSoloBdt   Float    @default(40)
+  ridePerKmSoloBdt      Float    @default(18)
+  rideMinFareSoloBdt    Float    @default(85)
+  parcelNormalBaseBdt   Float    @default(60)
+  parcelExpressBaseBdt  Float    @default(110)
+  parcelProtectionBdt   Float    @default(15)
+  parcelFrontMaxKg      Float    @default(8.0)
+  parcelFrontMaxVolCm3  Float    @default(31500) // 35x30x30 cm = 31,500 cm3
+  payoutScheduleLabel   String   @default("Every Friday at 12:00 AM GMT+6")
+  updatedAt             DateTime @updatedAt
+}
+

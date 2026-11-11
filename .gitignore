@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+backend/dist/
+backend/uploads/
+backend/*.db
+backend/.pglite/
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins*
+mobile/.packages
+
+# Secrets & Environment
+.env
+backend/.env
+mobile/.env
+
+# OS & IDEs
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
