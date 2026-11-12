@@ -202,26 +202,35 @@ class ApiClient {
 class AuthController extends StateNotifier<AuthSessionState> {
   final Ref ref;
   Timer? _idleTimer;
+  Future<void>? _initFuture;
 
   AuthController(this.ref) : super(AuthSessionState(lastActivityAt: DateTime.now())) {
     _idleTimer = Timer.periodic(const Duration(seconds: 30), (_) => checkInactivity());
   }
 
-  Future<void> init() async {
+  Future<void> init() => _initFuture ??= _doInit();
+
+  Future<void> _doInit() async {
     await AppConfig.loadSavedHost();
     final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getBool('twobee_onboarding_seen') ?? false;
     final token = prefs.getString('twobee_access_token');
-    state = state.copyWith(initialized: true, onboardingSeen: seen, accessToken: token);
+    state = state.copyWith(onboardingSeen: seen, accessToken: token);
 
     if (token != null && token.isNotEmpty) {
-      ref.read(socketServiceProvider).connect(token);
       try {
         await refreshRoles();
+        ref.read(socketServiceProvider).connect(token);
+      } on ApiException catch (e) {
+        if (e.statusCode == 401) {
+          await prefs.remove('twobee_access_token');
+          state = state.copyWith(clearTokens: true);
+        }
       } catch (_) {
-        // Keep session recoverable or allow relogin
+        // Keep session recoverable on transient offline startup
       }
     }
+    state = state.copyWith(initialized: true);
   }
 
   Future<void> markOnboardingSeen() async {

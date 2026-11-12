@@ -13,6 +13,18 @@ import 'features/rider/rider_shell_multiservice.dart';
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/splash',
+    redirect: (_, state) {
+      final auth = ref.read(authControllerProvider);
+      final loc = state.matchedLocation;
+      if (!auth.initialized && loc != '/splash') {
+        return '/splash';
+      }
+      if (auth.initialized && !auth.isLoggedIn) {
+        final needsAuth = loc == '/roles' || loc == '/client' || loc.startsWith('/merchant') || loc.startsWith('/rider');
+        if (needsAuth) return '/login';
+      }
+      return null;
+    },
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
       GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingScreen()),

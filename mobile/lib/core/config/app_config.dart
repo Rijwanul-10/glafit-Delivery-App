@@ -30,7 +30,14 @@ class AppConfig {
     }
     const defined = String.fromEnvironment('SOCKET_URL');
     if (defined.isNotEmpty) return defined;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    if (kIsWeb) {
+      final host = Uri.base.host;
+      if (host.isNotEmpty && host != 'localhost' && host != '127.0.0.1') {
+        return '${Uri.base.scheme}://$host:4000';
+      }
+      return 'http://localhost:4000';
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:4000';
     }
     return 'http://localhost:4000';
