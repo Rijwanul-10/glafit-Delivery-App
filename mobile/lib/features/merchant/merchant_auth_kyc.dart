@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,7 +19,7 @@ class _RestaurantTypeScreenState extends State<RestaurantTypeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Partner Store Type')),
+      appBar: AppBar(title: const Text('Partner Store Type'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -145,6 +146,7 @@ class _MerchantRegWizardScreenState extends ConsumerState<MerchantRegWizardScree
           {'docType': 'NID_FRONT', 'fileUrl': '/uploads/nid-front.jpg'},
           {'docType': 'SELFIE', 'fileUrl': '/uploads/selfie.jpg'},
         ],
+        'reRegisterDemo': true,
       });
       await ref.read(authControllerProvider.notifier).refreshRoles();
       if (mounted) {
@@ -180,7 +182,7 @@ class _MerchantRegWizardScreenState extends ConsumerState<MerchantRegWizardScree
     ];
 
     return Scaffold(
-      appBar: AppBar(title: Text(titles[_step])),
+      appBar: AppBar(title: Text(titles[_step]), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -422,7 +424,7 @@ class _MerchantNeedsChangesScreenState extends ConsumerState<MerchantNeedsChange
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Verification Update Required')),
+      appBar: AppBar(title: const Text('Verification Update Required'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -518,7 +520,7 @@ class _MerchantApprovedPinSetupScreenState extends ConsumerState<MerchantApprove
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Store Approved · Set 6-Digit Passcode')),
+      appBar: AppBar(title: const Text('Store Approved · Set 6-Digit Passcode'), actions: const [TwoBeeHomeAction()]),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -596,25 +598,45 @@ class _RestaurantLoginScreenState extends ConsumerState<RestaurantLoginScreen> {
   @override
   Widget build(BuildContext context) {
     final merchant = ref.watch(authControllerProvider).roles?['merchant'] as Map?;
+    final kycStatus = merchant?['kycStatus']?.toString();
+    final needsPinSetup = merchant?['needsPostApprovalPinSetup'] == true ||
+        merchant?['requiresPostApprovalPinSetup'] == true;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Merchant Passcode')),
+      appBar: AppBar(title: const Text('Merchant Passcode'), actions: const [TwoBeeHomeAction()]),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               CircleAvatar(
-                radius: 32,
+                radius: 30,
                 backgroundColor: TwoBeeColors.surfaceTonal,
-                child: const Icon(Icons.storefront_rounded, size: 34, color: TwoBeeColors.primary),
+                child: const Icon(Icons.storefront_rounded, size: 32, color: TwoBeeColors.primary),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(merchant?['businessName']?.toString() ?? 'Merchant Panel',
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
-              const Text('Enter your 6-digit security passcode', style: TextStyle(color: TwoBeeColors.textSecondary)),
-              const SizedBox(height: 24),
+              const Text('Enter your 6-digit security passcode (Demo: 258096)', style: TextStyle(color: TwoBeeColors.textSecondary, fontSize: 12)),
+              if (kycStatus == 'PENDING') ...[
+                const SizedBox(height: 8),
+                ActionChip(
+                  avatar: const Icon(Icons.hourglass_top_rounded, size: 16),
+                  label: const Text('Application Pending -> Auto-Verify Now'),
+                  onPressed: () => context.push('/merchant/pending'),
+                ),
+              ] else if (needsPinSetup) ...[
+                const SizedBox(height: 8),
+                ActionChip(
+                  backgroundColor: TwoBeeColors.surfaceTonal,
+                  avatar: const Icon(Icons.verified_rounded, size: 16, color: TwoBeeColors.primary),
+                  label: const Text('Store Approved! Set 6-Digit PIN ->'),
+                  onPressed: () => context.push('/merchant/post-approval-pin'),
+                ),
+              ],
+              const SizedBox(height: 18),
               PasscodePad(
                 length: 6,
                 value: _pin,
@@ -625,13 +647,19 @@ class _RestaurantLoginScreenState extends ConsumerState<RestaurantLoginScreen> {
                 },
               ),
               if (_error != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Text(_error!, style: const TextStyle(color: TwoBeeColors.errorText), textAlign: TextAlign.center),
               ],
               const Spacer(),
               TextButton(
                 onPressed: () => context.push('/merchant/forgot-passcode'),
                 child: const Text('Forgot passcode? (Reset via OTP + NID)'),
+              ),
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: () => context.push('/merchant/type'),
+                icon: const Icon(Icons.add_business_rounded),
+                label: const Text('New Merchant? Register Store / Home Kitchen ->'),
               ),
               TextButton(
                 onPressed: () => Navigator.push(
@@ -648,7 +676,7 @@ class _RestaurantLoginScreenState extends ConsumerState<RestaurantLoginScreen> {
   }
 }
 
-class MerchantVerificationPendingScreen extends StatelessWidget {
+class MerchantVerificationPendingScreen extends ConsumerStatefulWidget {
   final String businessName;
   final String merchantType;
   const MerchantVerificationPendingScreen({
@@ -658,40 +686,104 @@ class MerchantVerificationPendingScreen extends StatelessWidget {
   });
 
   @override
+  ConsumerState<MerchantVerificationPendingScreen> createState() =>
+      _MerchantVerificationPendingScreenState();
+}
+
+class _MerchantVerificationPendingScreenState
+    extends ConsumerState<MerchantVerificationPendingScreen> {
+  Timer? _autoVerifyTimer;
+  int _secondsLeft = 3;
+  bool _approved = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoVerifyTimer = Timer.periodic(const Duration(seconds: 1), (t) async {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      if (_secondsLeft > 1) {
+        setState(() => _secondsLeft--);
+        return;
+      }
+      t.cancel();
+      await _triggerAutoVerify();
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoVerifyTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _triggerAutoVerify() async {
+    try {
+      await ref.read(apiClientProvider).post('/common/demo/auto-verify-merchant');
+      await ref.read(authControllerProvider.notifier).refreshRoles();
+      if (!mounted) return;
+      setState(() {
+        _secondsLeft = 0;
+        _approved = true;
+      });
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) context.go('/merchant/post-approval-pin');
+    } catch (_) {}
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Verification Pending')),
+      appBar: AppBar(title: const Text('Verification Pending'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const CircleAvatar(
+            CircleAvatar(
               radius: 38,
               backgroundColor: TwoBeeColors.surfaceTonal,
-              child: Icon(Icons.hourglass_top_rounded, size: 40, color: TwoBeeColors.primary),
+              child: Icon(
+                _approved ? Icons.verified_rounded : Icons.hourglass_top_rounded,
+                size: 40,
+                color: TwoBeeColors.primary,
+              ),
             ),
             const SizedBox(height: 16),
-            Text('$businessName Submitted!', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
+            Text(
+              _approved ? '${widget.businessName} Approved!' : '${widget.businessName} Submitted!',
+              style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 6),
-            Text('Store Type: $merchantType · Estimated review time: 24–48 hours',
-                style: const TextStyle(color: TwoBeeColors.textSecondary), textAlign: TextAlign.center),
+            Text(
+              _approved
+                  ? 'Verified! Opening 6-digit security passcode setup...'
+                  : 'Store Type: ${widget.merchantType} · Auto-verifying in ${_secondsLeft}s...',
+              style: const TextStyle(color: TwoBeeColors.primary, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 18),
-            const Card(
+            Card(
               child: Column(
                 children: [
-                  ListTile(
+                  const ListTile(
                     leading: Icon(Icons.check_circle, color: TwoBeeColors.primary),
                     title: Text('1. Application Received'),
                   ),
-                  Divider(height: 1),
-                  ListTile(
-                    leading: Icon(Icons.schedule, color: TwoBeeColors.primary),
+                  const Divider(height: 1),
+                  const ListTile(
+                    leading: Icon(Icons.check_circle, color: TwoBeeColors.primary),
                     title: Text('2. Identity & Facebook Token Verification'),
                   ),
-                  Divider(height: 1),
+                  const Divider(height: 1),
                   ListTile(
-                    leading: Icon(Icons.lock_clock_outlined, color: TwoBeeColors.textSecondary),
-                    title: Text('3. Approval SMS Notice -> Create 6-Digit PIN'),
+                    leading: Icon(
+                      _approved ? Icons.check_circle : Icons.lock_clock_outlined,
+                      color: _approved ? TwoBeeColors.primary : TwoBeeColors.textSecondary,
+                    ),
+                    title: const Text('3. Approval Notice -> Create 6-Digit Passcode'),
                   ),
                 ],
               ),
@@ -699,7 +791,7 @@ class MerchantVerificationPendingScreen extends StatelessWidget {
             const Spacer(),
             ElevatedButton(
               onPressed: () => context.go('/merchant/pending'),
-              child: const Text('Open Locked Pending Home ->'),
+              child: const Text('Open Pending Status Home ->'),
             ),
           ],
         ),
@@ -721,7 +813,7 @@ class _MerchantFingerprintSetupScreenState extends State<MerchantFingerprintSetu
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Fingerprint & Biometric Setup')),
+      appBar: AppBar(title: const Text('Fingerprint & Biometric Setup'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -781,7 +873,7 @@ class _MerchantForgotPasscodeScreenState extends ConsumerState<MerchantForgotPas
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset 6-Digit Passcode')),
+      appBar: AppBar(title: const Text('Reset 6-Digit Passcode'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(

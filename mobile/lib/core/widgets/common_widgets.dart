@@ -1,8 +1,62 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import '../config/app_config.dart';
+import '../network/api_client.dart';
 import '../theme/twobee_theme.dart';
+
+/// AppBar Home button available across screens to jump straight to Client Home (Tab 0).
+class TwoBeeHomeAction extends ConsumerWidget {
+  const TwoBeeHomeAction({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return IconButton(
+      tooltip: 'Client Home',
+      icon: const Icon(Icons.home_rounded),
+      onPressed: () {
+        ref.read(clientTabIndexProvider.notifier).state = 0;
+        Navigator.of(context, rootNavigator: true).popUntil((r) => r.isFirst);
+        context.go('/client');
+      },
+    );
+  }
+}
+
+/// 4 individual Security/Start PIN digit tiles matching reference mockups.
+class PinDigitsRow extends StatelessWidget {
+  final String pin;
+  const PinDigitsRow({super.key, required this.pin});
+
+  @override
+  Widget build(BuildContext context) {
+    final chars = pin.padRight(4, '-').split('').take(4).toList();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: chars
+          .map(
+            (c) => Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: 38,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: TwoBeeColors.surfaceCard,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.35)),
+              ),
+              child: Text(
+                c,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: TwoBeeColors.primary),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
 
 class VerificationBanner extends StatelessWidget {
   final String title;

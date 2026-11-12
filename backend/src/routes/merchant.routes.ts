@@ -52,13 +52,14 @@ merchantRouter.post(
       documents: z
         .array(z.object({ docType: z.string(), fileUrl: z.string() }))
         .default([]),
+      reRegisterDemo: z.boolean().default(false),
     });
     const parsed = schema.parse(req.body);
     const prisma = getPrisma();
     const userId = req.auth!.userId;
 
     const existing = await prisma.merchantProfile.findUnique({ where: { userId } });
-    if (existing) {
+    if (existing && !(env.nodeEnv !== 'production' && parsed.reRegisterDemo)) {
       throw new HttpError(409, 'MERCHANT_ALREADY_EXISTS', 'Merchant application already exists for this phone');
     }
 
@@ -70,34 +71,34 @@ merchantRouter.post(
     }
 
     const profile = await prisma.$transaction(async (tx) => {
-      const created = await tx.merchantProfile.create({
-        data: {
-          userId,
-          merchantType: parsed.merchantType,
-          kycStatus: 'PENDING',
-          passcodeSet: false, // Mandatory post-approval 6-digit PIN gate!
-          passcodeHash: null,
-          businessName: parsed.businessName,
-          ownerOrCookName: parsed.ownerOrCookName,
-          cuisinesJson: parsed.cuisines,
-          address: parsed.address,
-          lat: parsed.lat,
-          lng: parsed.lng,
-          areaZoneId: parsed.areaZoneId,
-          contactPhone: parsed.contactPhone,
-          contactEmail: parsed.contactEmail || null,
-          eTin: parsed.eTin,
-          tradeLicenseNo: parsed.tradeLicenseNo,
-          nidNumber: parsed.nidNumber,
-          fbPageUrl: parsed.fbPageUrl,
-          fbVerifyToken: parsed.fbVerifyToken,
-          avgPrepMins: parsed.avgPrepMins,
-          dailyOrderLimit: parsed.merchantType === 'HOME_KITCHEN' ? parsed.dailyOrderLimit ?? 15 : null,
-          dailyCutoffTime: parsed.merchantType === 'HOME_KITCHEN' ? parsed.dailyCutoffTime ?? '20:00' : null,
-          hygieneConfirmed: parsed.hygieneConfirmed,
-          isStoreOpen: false,
-        },
-      });
+      const dataFields = {
+        merchantType: parsed.merchantType,
+        kycStatus: 'PENDING' as const,
+        passcodeSet: false, // Mandatory post-approval 6-digit PIN gate!
+        passcodeHash: null,
+        businessName: parsed.businessName,
+        ownerOrCookName: parsed.ownerOrCookName,
+        cuisinesJson: parsed.cuisines,
+        address: parsed.address,
+        lat: parsed.lat,
+        lng: parsed.lng,
+        areaZoneId: parsed.areaZoneId,
+        contactPhone: parsed.contactPhone,
+        contactEmail: parsed.contactEmail || null,
+        eTin: parsed.eTin,
+        tradeLicenseNo: parsed.tradeLicenseNo,
+        nidNumber: parsed.nidNumber,
+        fbPageUrl: parsed.fbPageUrl,
+        fbVerifyToken: parsed.fbVerifyToken,
+        avgPrepMins: parsed.avgPrepMins,
+        dailyOrderLimit: parsed.merchantType === 'HOME_KITCHEN' ? parsed.dailyOrderLimit ?? 15 : null,
+        dailyCutoffTime: parsed.merchantType === 'HOME_KITCHEN' ? parsed.dailyCutoffTime ?? '20:00' : null,
+        hygieneConfirmed: parsed.hygieneConfirmed,
+        isStoreOpen: false,
+      };
+      const created = existing
+        ? await tx.merchantProfile.update({ where: { id: existing.id }, data: dataFields })
+        : await tx.merchantProfile.create({ data: { userId, ...dataFields } });
 
       if (parsed.documents.length > 0) {
         await tx.verificationDocument.createMany({
@@ -111,8 +112,14 @@ merchantRouter.post(
         });
       }
 
-      await tx.payoutAccount.create({
-        data: {
+      await tx.payoutAccount.upsert({
+        where: { ownerRole_ownerId: { ownerRole: 'MERCHANT', ownerId: created.id } },
+        update: {
+          provider: parsed.payoutProvider,
+          accountNumber: parsed.payoutAccountNumber,
+          holderName: parsed.payoutHolderName,
+        },
+        create: {
           ownerRole: 'MERCHANT',
           ownerId: created.id,
           provider: parsed.payoutProvider,

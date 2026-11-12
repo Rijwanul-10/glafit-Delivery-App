@@ -124,6 +124,12 @@ class _RideLocationScreenState extends ConsumerState<RideLocationScreen> {
           ),
         ),
       );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not estimate route: $e'), backgroundColor: TwoBeeColors.errorText),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -132,18 +138,65 @@ class _RideLocationScreenState extends ConsumerState<RideLocationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('2Bee Ride')),
+      appBar: AppBar(
+        title: const Text('2Bee Ride'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TwoBeeMapPreview(
-            pickupLat: (_pickup['lat'] as num).toDouble(),
-            pickupLng: (_pickup['lng'] as num).toDouble(),
-            dropoffLat: (_dropoff['lat'] as num).toDouble(),
-            dropoffLng: (_dropoff['lng'] as num).toDouble(),
-            height: 220,
+          Stack(
+            children: [
+              TwoBeeMapPreview(
+                pickupLat: (_pickup['lat'] as num).toDouble(),
+                pickupLng: (_pickup['lng'] as num).toDouble(),
+                dropoffLat: (_dropoff['lat'] as num).toDouble(),
+                dropoffLng: (_dropoff['lng'] as num).toDouble(),
+                height: 210,
+              ),
+              Positioned(
+                top: 10,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: TwoBeeColors.obsidian.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.electric_moped_rounded, color: TwoBeeColors.primarySoft, size: 15),
+                      SizedBox(width: 6),
+                      Text('4 EV Riders Nearby · 2m', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: TwoBeeColors.surfaceTonal,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.25)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.eco_rounded, color: TwoBeeColors.primary, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '100% Zero-Emission Electric EV Fleet · Glafit GFR-02 & LOM EV',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TwoBeeColors.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -153,7 +206,7 @@ class _RideLocationScreenState extends ConsumerState<RideLocationScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Pickup Spot', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: TwoBeeColors.textSecondary)),
+                      const Text('PICKUP SPOT', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: TwoBeeColors.textSecondary, letterSpacing: 0.7)),
                       TextButton.icon(
                         onPressed: () => _searchPlaceDialog(forPickup: true),
                         icon: const Icon(Icons.search, size: 16),
@@ -174,7 +227,7 @@ class _RideLocationScreenState extends ConsumerState<RideLocationScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Where to?', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: TwoBeeColors.textSecondary)),
+                      const Text('WHERE TO?', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: TwoBeeColors.textSecondary, letterSpacing: 0.7)),
                       TextButton.icon(
                         onPressed: () => _searchPlaceDialog(forPickup: false),
                         icon: const Icon(Icons.search, size: 16),
@@ -191,13 +244,17 @@ class _RideLocationScreenState extends ConsumerState<RideLocationScreen> {
                       if (v != null) setState(() => _dropoff = v);
                     },
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
+                  const Text('SAVED & RECENT DESTINATIONS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: TwoBeeColors.textSecondary, letterSpacing: 0.7)),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      ActionChip(label: const Text('Uttara'), onPressed: () => setState(() => _dropoff = _rideZoneSpots[2])),
-                      ActionChip(label: const Text('Mirpur 10'), onPressed: () => setState(() => _dropoff = _rideZoneSpots[3])),
-                      ActionChip(label: const Text('Dhanmondi 27'), onPressed: () => setState(() => _dropoff = _rideZoneSpots[4])),
+                      ActionChip(avatar: const Icon(Icons.home_outlined, size: 16), label: const Text('Uttara'), onPressed: () => setState(() => _dropoff = _rideZoneSpots[2])),
+                      ActionChip(avatar: const Icon(Icons.work_outline, size: 16), label: const Text('Gulshan 2'), onPressed: () => setState(() => _dropoff = _rideZoneSpots[1])),
+                      ActionChip(avatar: const Icon(Icons.history_rounded, size: 16), label: const Text('Mirpur 10'), onPressed: () => setState(() => _dropoff = _rideZoneSpots[3])),
+                      ActionChip(avatar: const Icon(Icons.place_outlined, size: 16), label: const Text('Dhanmondi 27'), onPressed: () => setState(() => _dropoff = _rideZoneSpots[4])),
                     ],
                   ),
                 ],
@@ -265,6 +322,12 @@ class _RideTierScreenState extends ConsumerState<RideTierScreen> {
         context,
         MaterialPageRoute(builder: (_) => RideMatchingRadarScreen(tripId: res['trip']['id'] as String)),
       );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not dispatch ride: $e'), backgroundColor: TwoBeeColors.errorText),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -273,14 +336,39 @@ class _RideTierScreenState extends ConsumerState<RideTierScreen> {
   @override
   Widget build(BuildContext context) {
     final tiers = (widget.estimate['tiers'] as List).cast<Map<String, dynamic>>();
+    final distKm = (widget.estimate['distanceKm'] as num?) ?? 5.0;
+    final co2SavedKg = (distKm * 0.14).toStringAsFixed(2);
     return Scaffold(
-      appBar: AppBar(title: const Text('Choose Fleet Tier')),
+      appBar: AppBar(title: const Text('Choose Fleet Tier'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(
-            '${widget.pickup['name']} → ${widget.dropoff['name']} · ${widget.estimate['distanceKm']} km',
-            style: const TextStyle(fontWeight: FontWeight.w700),
+          Card(
+            color: TwoBeeColors.surfaceTonal,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  const Icon(Icons.route_rounded, color: TwoBeeColors.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${widget.pickup['name']} → ${widget.dropoff['name']}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 2),
+                        Text('${distKm.toStringAsFixed(1)} km · Fixed Price Guarantee', style: const TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: TwoBeeColors.primary, borderRadius: BorderRadius.circular(12)),
+                    child: Text('$co2SavedKg kg CO2 saved', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           ...tiers.map((t) {
@@ -288,11 +376,18 @@ class _RideTierScreenState extends ConsumerState<RideTierScreen> {
             return Card(
               margin: const EdgeInsets.only(bottom: 10),
               color: sel ? TwoBeeColors.surfaceTonal : TwoBeeColors.surfaceCard,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: sel ? TwoBeeColors.primary : TwoBeeColors.borderSoft, width: sel ? 2 : 1),
+              ),
               child: ListTile(
-                leading: const Icon(Icons.electric_moped_rounded, color: TwoBeeColors.primary, size: 30),
-                title: Text(t['name'] as String, style: const TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: Text('${t['subtitle']} · ${t['etaMins']}m'),
-                trailing: Text(bdt(t['totalFareBdt'] as num), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: TwoBeeColors.primary)),
+                leading: CircleAvatar(
+                  backgroundColor: sel ? TwoBeeColors.primary : TwoBeeColors.surfaceTonal,
+                  child: Icon(Icons.electric_moped_rounded, color: sel ? Colors.white : TwoBeeColors.primary),
+                ),
+                title: Text(t['name'] as String, style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text('${t['subtitle']} · ETA ${t['etaMins']} mins'),
+                trailing: Text(bdt(t['totalFareBdt'] as num), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: TwoBeeColors.primary)),
                 onTap: () => setState(() => _selectedTier = t['id'] as String),
               ),
             );
@@ -390,7 +485,7 @@ class _RideMatchingRadarScreenState extends ConsumerState<RideMatchingRadarScree
   Widget build(BuildContext context) {
     final t = _trip;
     return Scaffold(
-      appBar: AppBar(title: const Text('3. Rider Matching Radar')),
+      appBar: AppBar(title: const Text('3. Rider Matching Radar'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -401,12 +496,12 @@ class _RideMatchingRadarScreenState extends ConsumerState<RideMatchingRadarScree
                 pickupLng: (t['pickupLng'] as num).toDouble(),
                 dropoffLat: (t['dropoffLat'] as num).toDouble(),
                 dropoffLng: (t['dropoffLng'] as num).toDouble(),
-                height: 190,
+                height: 180,
               ),
             const Spacer(),
             Container(
-              width: 140,
-              height: 140,
+              width: 144,
+              height: 144,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: TwoBeeColors.surfaceTonal,
@@ -415,20 +510,32 @@ class _RideMatchingRadarScreenState extends ConsumerState<RideMatchingRadarScree
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.radar_rounded, color: TwoBeeColors.primary, size: 46),
+                  const Icon(Icons.radar_rounded, color: TwoBeeColors.primary, size: 44),
                   const SizedBox(height: 4),
                   Text('${_secondsLeft}s', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: TwoBeeColors.primary)),
+                  const Text('< 45s match', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TwoBeeColors.textSecondary)),
                 ],
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             const Text('Searching Nearest 2Bee EV Riders...', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             Text(
-              t != null ? '${t['pickupAddress']} -> ${t['dropoffAddress']} · ${bdt(t['totalFareBdt'] as num)}' : 'Dispatching to Banani/Gulshan hub...',
+              t != null ? '${t['pickupAddress']} → ${t['dropoffAddress']}' : 'Dispatching to Banani/Gulshan hub...',
               textAlign: TextAlign.center,
               style: const TextStyle(color: TwoBeeColors.textSecondary),
             ),
+            if (t != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: TwoBeeColors.surfaceTonal, borderRadius: BorderRadius.circular(20)),
+                child: Text(
+                  'Fixed Price Guarantee · ${bdt(t['totalFareBdt'] as num)} (${t['paymentMethod']})',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: TwoBeeColors.primary),
+                ),
+              ),
+            ],
             const Spacer(),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(backgroundColor: TwoBeeColors.obsidian),
@@ -532,11 +639,17 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
       appBar: AppBar(
         title: Text('Ride ${t['tripCode']}'),
         actions: [
-          TextButton.icon(
-            onPressed: () => showSosSafetySheet(context, ref, role: 'CLIENT', orderId: widget.tripId),
-            icon: const Icon(Icons.emergency_rounded, color: TwoBeeColors.errorText),
-            label: const Text('SOS', style: TextStyle(color: TwoBeeColors.errorText, fontWeight: FontWeight.w800)),
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(color: TwoBeeColors.errorBg, borderRadius: BorderRadius.circular(20)),
+            child: TextButton.icon(
+              onPressed: () => showSosSafetySheet(context, ref, role: 'CLIENT', orderId: widget.tripId),
+              icon: const Icon(Icons.emergency_rounded, color: TwoBeeColors.errorText, size: 16),
+              label: const Text('SOS', style: TextStyle(color: TwoBeeColors.errorText, fontWeight: FontWeight.w800, fontSize: 12)),
+            ),
           ),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: RefreshIndicator(
@@ -544,6 +657,25 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: TwoBeeColors.obsidian, borderRadius: BorderRadius.circular(20)),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.circle, color: TwoBeeColors.primarySoft, size: 8),
+                      SizedBox(width: 6),
+                      Text('LIVE TELEMETRY', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.7)),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Text(phaseText, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: TwoBeeColors.primary)),
+              ],
+            ),
+            const SizedBox(height: 8),
             TwoBeeMapPreview(
               pickupLat: (t['pickupLat'] as num).toDouble(),
               pickupLng: (t['pickupLng'] as num).toDouble(),
@@ -551,32 +683,29 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
               dropoffLng: (t['dropoffLng'] as num).toDouble(),
               riderLat: _riderLat,
               riderLng: _riderLng,
-              height: 210,
+              height: 205,
             ),
             const SizedBox(height: 14),
             Card(
               color: TwoBeeColors.surfaceTonal,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(phaseText, style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
-                          const SizedBox(height: 4),
-                          Text('${t['pickupAddress']} → ${t['dropoffAddress']}', style: const TextStyle(fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                    Column(
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('START PIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
-                        Text(t['startPin'].toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 3)),
+                        const Text('START TRIP PIN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.7, color: TwoBeeColors.primary)),
+                        PinDigitsRow(pin: t['startPin'].toString()),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    const Text('LIVE ITINERARY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.7, color: TwoBeeColors.textSecondary)),
+                    const SizedBox(height: 6),
+                    Text('1. Rider En-Route · ${status == 'RIDER_ASSIGNED' ? 'Active' : 'Done'}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    Text('2. Pickup at ${t['pickupAddress']} · ${status == 'ARRIVED_PICKUP' ? 'Waiting PIN' : (status == 'ON_TRIP' || status == 'COMPLETED' ? 'Boarded' : 'Next')}', style: const TextStyle(fontSize: 12)),
+                    Text('3. Dropoff at ${t['dropoffAddress']} · ${status == 'COMPLETED' ? 'Arrived' : (status == 'ON_TRIP' ? 'In Transit' : 'Pending')}', style: const TextStyle(fontSize: 12)),
                   ],
                 ),
               ),
@@ -683,7 +812,7 @@ class _RideCompletionRatingScreenState extends ConsumerState<RideCompletionRatin
     final distKm = (t['distanceKm'] as num?) ?? 5.4;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('5. Trip Completion & Rating')),
+      appBar: AppBar(title: const Text('5. Trip Completion & Rating'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -692,7 +821,7 @@ class _RideCompletionRatingScreenState extends ConsumerState<RideCompletionRatin
             decoration: BoxDecoration(color: TwoBeeColors.obsidian, borderRadius: BorderRadius.circular(16)),
             child: Column(
               children: [
-                const Text('ZERO-EMISSION TRIP COMPLETE', style: TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w700, fontSize: 12)),
+                const Text('DESTINATION REACHED · ZERO-EMISSION', style: TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 0.6)),
                 const SizedBox(height: 4),
                 Text(bdt(t['totalFareBdt'] as num), style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 6),

@@ -54,15 +54,18 @@ class CartState {
 class CartNotifier extends StateNotifier<CartState> {
   CartNotifier() : super(const CartState());
 
-  void addItem({
+  /// Adds an item to cart. If switching restaurants, clears previous items and returns the removed restaurant name.
+  String? addItem({
     required String merchantId,
     required String merchantName,
     required double deliveryFee,
     required CartLine line,
   }) {
+    String? removedMerchant;
     if (state.merchantId != null && state.merchantId != merchantId) {
+      removedMerchant = state.merchantName ?? 'Previous Restaurant';
       state = CartState(merchantId: merchantId, merchantName: merchantName, deliveryFee: deliveryFee, lines: [line]);
-      return;
+      return removedMerchant;
     }
     final next = [...state.lines];
     final idx = next.indexWhere((x) => x.menuItemId == line.menuItemId && x.selectedOptions.length == line.selectedOptions.length);
@@ -78,6 +81,7 @@ class CartNotifier extends StateNotifier<CartState> {
       lines: next,
       promoCode: state.promoCode,
     );
+    return null;
   }
 
   void updateQty(int index, int delta) {
@@ -158,6 +162,7 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesScreen())),
             icon: const Icon(Icons.favorite_border_rounded),
           ),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: Column(
@@ -281,6 +286,7 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
           decoration: const InputDecoration(hintText: 'Search Kacchi, Home Kitchen...', border: InputBorder.none),
           onChanged: _search,
         ),
+        actions: const [TwoBeeHomeAction()],
       ),
       body: Column(
         children: [
@@ -361,7 +367,7 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Favorites')),
+      appBar: AppBar(title: const Text('Favorites'), actions: const [TwoBeeHomeAction()]),
       body: Column(
         children: [
           Padding(
@@ -454,7 +460,7 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
     final groups = (item['optionGroupsJson'] as List?) ?? [];
     final m = _merchant!;
     if (groups.isEmpty) {
-      ref.read(cartProvider.notifier).addItem(
+      final removed = ref.read(cartProvider.notifier).addItem(
             merchantId: m['id'] as String,
             merchantName: m['businessName'] as String,
             deliveryFee: (m['deliveryFeeBdt'] as num).toDouble(),
@@ -464,6 +470,16 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
               basePrice: (item['priceBdt'] as num).toDouble(),
             ),
           );
+      if (removed != null && mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              duration: const Duration(milliseconds: 1800),
+              content: Text('Previous items from $removed were removed'),
+            ),
+          );
+      }
       return;
     }
 
@@ -504,6 +520,7 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
               }
             },
           ),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: ListView(
@@ -579,7 +596,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final cart = ref.watch(cartProvider);
     if (cart.lines.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Cart')),
+        appBar: AppBar(title: const Text('Cart'), actions: const [TwoBeeHomeAction()]),
         body: const Center(child: Text('Your cart is empty')),
       );
     }
@@ -587,7 +604,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final total = cart.subtotal + cart.deliveryFee + 15 + 10;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Cart · ${cart.merchantName}')),
+      appBar: AppBar(title: Text('Cart · ${cart.merchantName}'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -739,7 +756,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Checkout')),
+      appBar: AppBar(title: const Text('Checkout'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -773,7 +790,7 @@ class FoodOrderPlacedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Order Placed')),
+      appBar: AppBar(title: const Text('Order Placed'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -907,7 +924,7 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
     final items = (o['items'] as List?) ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: Text('Order ${o['orderCode']}')),
+      appBar: AppBar(title: Text('Order ${o['orderCode']}'), actions: const [TwoBeeHomeAction()]),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -1059,7 +1076,7 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
     final lineTotal = ((item['priceBdt'] as num).toDouble() + extra) * _qty;
 
     return Scaffold(
-      appBar: AppBar(title: Text(item['name'].toString())),
+      appBar: AppBar(title: Text(item['name'].toString()), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1138,7 +1155,7 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
               final opts = _selected.entries
                   .expand((e) => e.value.map((o) => {'group': e.key, 'name': o['name'], 'extraBdt': o['extraBdt']}))
                   .toList();
-              ref.read(cartProvider.notifier).addItem(
+              final removed = ref.read(cartProvider.notifier).addItem(
                     merchantId: widget.merchant['id'] as String,
                     merchantName: widget.merchant['businessName'] as String,
                     deliveryFee: (widget.merchant['deliveryFeeBdt'] as num).toDouble(),
@@ -1150,6 +1167,16 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
                       quantity: _qty,
                     ),
                   );
+              if (removed != null) {
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    SnackBar(
+                      duration: const Duration(milliseconds: 1800),
+                      content: Text('Previous items from $removed were removed'),
+                    ),
+                  );
+              }
               Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const CartScreen()));
             },
             child: Text('Add to Cart · ${bdt(lineTotal)} ->'),
@@ -1180,7 +1207,7 @@ class _FoodDeliveredRatingScreenState extends ConsumerState<FoodDeliveredRatingS
   Widget build(BuildContext context) {
     final o = widget.order;
     return Scaffold(
-      appBar: AppBar(title: const Text('Delivered & Rating')),
+      appBar: AppBar(title: const Text('Delivered & Rating'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -1255,6 +1282,16 @@ class _FoodDeliveredRatingScreenState extends ConsumerState<FoodDeliveredRatingS
                   },
             child: Text(_saving ? 'Submitting...' : 'Submit Review -> Order Detail'),
           ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const FoodHomeScreen()),
+              (r) => r.isFirst,
+            ),
+            icon: const Icon(Icons.restaurant_menu_rounded),
+            label: const Text('Back to Client Food Home'),
+          ),
         ],
       ),
     );
@@ -1296,7 +1333,7 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
     final m = o['merchant'] as Map?;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Order Detail · ${o['orderCode']}')),
+      appBar: AppBar(title: Text('Order Detail · ${o['orderCode']}'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1334,8 +1371,9 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
           ElevatedButton.icon(
             onPressed: () {
               if (m != null) {
+                String? removed;
                 for (final it in items) {
-                  ref.read(cartProvider.notifier).addItem(
+                  final r = ref.read(cartProvider.notifier).addItem(
                         merchantId: m['id'] as String,
                         merchantName: m['businessName'] as String,
                         deliveryFee: (o['deliveryFeeBdt'] as num).toDouble(),
@@ -1346,6 +1384,15 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
                           quantity: (it['quantity'] as num).toInt(),
                         ),
                       );
+                  removed ??= r;
+                }
+                if (removed != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Previous items from $removed were removed'),
+                      duration: const Duration(milliseconds: 1800),
+                    ),
+                  );
                 }
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
               }
@@ -1358,6 +1405,16 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportLegalScreen(title: 'Order Support'))),
             icon: const Icon(Icons.help_outline),
             label: const Text('Need Help / Issue'),
+          ),
+          const SizedBox(height: 10),
+          TextButton.icon(
+            onPressed: () => Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const FoodHomeScreen()),
+              (r) => r.isFirst,
+            ),
+            icon: const Icon(Icons.restaurant_menu_rounded),
+            label: const Text('Back to Client Food Home'),
           ),
         ],
       ),

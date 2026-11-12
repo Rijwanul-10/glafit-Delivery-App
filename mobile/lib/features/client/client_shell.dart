@@ -18,23 +18,22 @@ class ClientShell extends ConsumerStatefulWidget {
 }
 
 class _ClientShellState extends ConsumerState<ClientShell> {
-  int _tab = 0;
-
   @override
   Widget build(BuildContext context) {
+    final tab = ref.watch(clientTabIndexProvider);
     final pages = [
-      _ClientHomeTab(onOpenActivity: () => setState(() => _tab = 1)),
+      _ClientHomeTab(onOpenActivity: () => ref.read(clientTabIndexProvider.notifier).state = 1),
       const _ClientActivityTab(),
       const _ClientWalletTab(),
       const _ClientProfileTab(),
     ];
 
     return Scaffold(
-      body: IndexedStack(index: _tab, children: pages),
+      body: IndexedStack(index: tab, children: pages),
       bottomNavigationBar: AppBottomNav(
         role: AppUserRole.client,
-        currentIndex: _tab,
-        onTap: (i) => setState(() => _tab = i),
+        currentIndex: tab,
+        onTap: (i) => ref.read(clientTabIndexProvider.notifier).state = i,
       ),
     );
   }
@@ -381,7 +380,13 @@ class _ClientActivityTabState extends ConsumerState<_ClientActivityTab> {
   Widget build(BuildContext context) {
     final list = _showActive ? _active : _past;
     return Scaffold(
-      appBar: AppBar(title: const Text('Activity'), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
+      appBar: AppBar(
+        title: const Text('Activity'),
+        actions: [
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          const TwoBeeHomeAction(),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -516,7 +521,7 @@ class _ClientWalletTabState extends ConsumerState<_ClientWalletTab> {
     final vouchers = (_data?['vouchers'] as List?) ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Wallet')),
+      appBar: AppBar(title: const Text('Wallet'), actions: const [TwoBeeHomeAction()]),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -593,7 +598,7 @@ class _ClientProfileTab extends ConsumerWidget {
     final user = ref.watch(authControllerProvider).user;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: const Text('Profile'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -708,7 +713,7 @@ class _EditClientProfileScreenState extends ConsumerState<EditClientProfileScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Profile')),
+      appBar: AppBar(title: const Text('Edit Profile'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -820,7 +825,7 @@ class _SavedAddressesScreenState extends ConsumerState<SavedAddressesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Saved Addresses')),
+      appBar: AppBar(title: const Text('Saved Addresses'), actions: const [TwoBeeHomeAction()]),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: TwoBeeColors.primary,
         foregroundColor: Colors.white,

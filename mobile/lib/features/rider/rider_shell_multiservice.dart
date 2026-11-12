@@ -73,11 +73,34 @@ class _RiderHomeTab extends ConsumerStatefulWidget {
 class _RiderHomeTabState extends ConsumerState<_RiderHomeTab> {
   Map<String, dynamic>? _home;
   bool _loading = true;
+  Timer? _autoVerifyTimer;
+  bool _justAutoApproved = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _autoVerifyTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleAutoVerifyIfPending(Map<String, dynamic> data) {
+    final status = data['rider']?['kycStatus'];
+    if (status == 'APPROVED') return;
+    if (_autoVerifyTimer?.isActive == true) return;
+    _autoVerifyTimer = Timer(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      try {
+        await ref.read(apiClientProvider).post('/common/demo/auto-verify-rider');
+        await ref.read(authControllerProvider.notifier).refreshRoles();
+        if (mounted) setState(() => _justAutoApproved = true);
+        await _load();
+      } catch (_) {}
+    });
   }
 
   Future<void> _load() async {
@@ -87,6 +110,7 @@ class _RiderHomeTabState extends ConsumerState<_RiderHomeTab> {
     try {
       final res = await ref.read(apiClientProvider).get('/rider/panel/home', roleToken: token);
       setState(() => _home = res);
+      _scheduleAutoVerifyIfPending(res);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -170,6 +194,7 @@ class _RiderHomeTabState extends ConsumerState<_RiderHomeTab> {
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen(roleFilter: 'RIDER'))),
             icon: const Icon(Icons.notifications_none_rounded),
           ),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: RefreshIndicator(
@@ -179,8 +204,14 @@ class _RiderHomeTabState extends ConsumerState<_RiderHomeTab> {
           children: [
             if (!approved) ...[
               const VerificationBanner(
-                title: 'Verification in progress',
-                subtitle: 'You can go online once approved by 2Bee KYC team.',
+                title: 'Verification in progress · Auto-verifying in 3s...',
+                subtitle: 'Reviewing your KYC & front-carrier limits. Rider & Multi-Service features unlock automatically.',
+              ),
+              const SizedBox(height: 12),
+            ] else if (_justAutoApproved) ...[
+              const VerificationBanner(
+                title: "You're approved! Rider Home Unlocked",
+                subtitle: 'KYC verified — you can now Go Online and accept Multi-Service jobs.',
               ),
               const SizedBox(height: 12),
             ],
@@ -435,7 +466,7 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
     final addons = (_open?['multiServiceRideAddons'] as List?) ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Looking for Requests'), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
+      appBar: AppBar(title: const Text('Looking for Requests'), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh)), const TwoBeeHomeAction()]),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -605,7 +636,7 @@ class _ParcelPickupScreenState extends ConsumerState<ParcelPickupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Parcel Pickup (Multi-Service)')),
+      appBar: AppBar(title: const Text('Parcel Pickup (Multi-Service)'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -693,7 +724,7 @@ class MultiServiceUnavailableScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Multi-Service Status')),
+      appBar: AppBar(title: const Text('Multi-Service Status'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -781,6 +812,7 @@ class _ParcelDeliverScreenState extends ConsumerState<ParcelDeliverScreen> {
             icon: const Icon(Icons.emergency_rounded, color: TwoBeeColors.errorText),
             onPressed: () => showSosSafetySheet(context, ref, role: 'RIDER', orderId: widget.parcelId),
           ),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: ListView(
@@ -913,7 +945,7 @@ class _PassengerPickupScreenState extends ConsumerState<PassengerPickupScreen> {
     final b = widget.batch;
     final ride = b['rideTrip'] as Map;
     return Scaffold(
-      appBar: AppBar(title: const Text('Passenger Pickup (Multi-Service)')),
+      appBar: AppBar(title: const Text('Passenger Pickup (Multi-Service)'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -989,6 +1021,7 @@ class MultiServiceLiveScreen extends StatelessWidget {
               Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${ride['dropoffLat'] ?? 23.8726},${ride['dropoffLng'] ?? 90.3983}'),
             ),
           ),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: ListView(
@@ -1060,7 +1093,7 @@ class _PassengerDropoffScreenState extends ConsumerState<PassengerDropoffScreen>
     final ride = b['rideTrip'] as Map;
     final parcel = b['parcelShipment'] as Map;
     return Scaffold(
-      appBar: AppBar(title: const Text('Passenger Dropoff & Fare')),
+      appBar: AppBar(title: const Text('Passenger Dropoff & Fare'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1131,7 +1164,7 @@ class _FinalParcelDeliveryScreenState extends ConsumerState<FinalParcelDeliveryS
     final b = widget.batch;
     final parcel = b['parcelShipment'] as Map;
     return Scaffold(
-      appBar: AppBar(title: const Text('Final Parcel Delivery (Stop 2)')),
+      appBar: AppBar(title: const Text('Final Parcel Delivery (Stop 2)'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1188,7 +1221,7 @@ class BatchCompletionSummaryScreen extends StatelessWidget {
     final ride = batch['rideTrip'] as Map? ?? {};
     final parcel = batch['parcelShipment'] as Map? ?? {};
     return Scaffold(
-      appBar: AppBar(title: const Text('Batch Completed')),
+      appBar: AppBar(title: const Text('Batch Completed'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -1276,7 +1309,7 @@ class _RiderFoodExecutionScreenState extends ConsumerState<RiderFoodExecutionScr
     final o = _order!;
     final status = o['status'] as String;
     return Scaffold(
-      appBar: AppBar(title: Text('Food Delivery ${o['orderCode']}')),
+      appBar: AppBar(title: Text('Food Delivery ${o['orderCode']}'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1370,7 +1403,7 @@ class _RiderRideExecutionScreenState extends ConsumerState<RiderRideExecutionScr
     final t = _trip!;
     final status = t['status'] as String;
     return Scaffold(
-      appBar: AppBar(title: Text('Ride ${t['tripCode']}')),
+      appBar: AppBar(title: Text('Ride ${t['tripCode']}'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1475,7 +1508,7 @@ class _RiderJobsTabState extends ConsumerState<_RiderJobsTab> {
         : [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Service History'), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))]),
+      appBar: AppBar(title: const Text('Service History'), actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh)), const TwoBeeHomeAction()]),
       body: Column(
         children: [
           Padding(
@@ -1628,7 +1661,7 @@ class RiderServiceDetailScreen extends StatelessWidget {
     final payout = data['totalPayoutBdt'] ?? data['riderPayoutBdt'] ?? 0;
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(title), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1717,7 +1750,7 @@ class _RiderWalletTabState extends ConsumerState<_RiderWalletTab> {
     final analytics = (_data?['analytics'] as Map?) ?? {};
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Wallet & Earnings')),
+      appBar: AppBar(title: const Text('Wallet & Earnings'), actions: const [TwoBeeHomeAction()]),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -1806,7 +1839,7 @@ class _RiderProfileTab extends ConsumerWidget {
     final user = ref.watch(authControllerProvider).user;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Rider Profile')),
+      appBar: AppBar(title: const Text('Rider Profile'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1897,7 +1930,7 @@ class _CarryingSetupScreenState extends ConsumerState<CarryingSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Today's Carrying Setup")),
+      appBar: AppBar(title: const Text("Today's Carrying Setup"), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1984,7 +2017,7 @@ class _BikeRentalHomeScreenState extends ConsumerState<BikeRentalHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('2Bee EV Bike Rental')),
+      appBar: AppBar(title: const Text('2Bee EV Bike Rental'), actions: const [TwoBeeHomeAction()]),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -2063,7 +2096,7 @@ class _RiderSecurityScreenState extends ConsumerState<RiderSecurityScreen> {
     final devices = (_secData?['devices'] as List?) ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Rider Security (4-Digit PIN)')),
+      appBar: AppBar(title: const Text('Rider Security (4-Digit PIN)'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

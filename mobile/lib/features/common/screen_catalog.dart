@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/twobee_theme.dart';
+import '../../core/widgets/common_widgets.dart';
 import '../client/client_food_screens.dart';
 import '../client/client_parcel_screens.dart';
 import '../client/client_ride_screens.dart';
@@ -115,7 +116,7 @@ class _AllScreensExplorerScreenState extends ConsumerState<AllScreensExplorerScr
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('All 2Bee Screens & Flows')),
+      appBar: AppBar(title: const Text('All 2Bee Screens & Flows'), actions: const [TwoBeeHomeAction()]),
       body: Stack(
         children: [
           ListView(

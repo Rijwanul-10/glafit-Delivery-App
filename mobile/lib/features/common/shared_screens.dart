@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/twobee_theme.dart';
+import '../../core/widgets/common_widgets.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   final String? roleFilter;
@@ -54,6 +55,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         title: const Text('Notifications'),
         actions: [
           TextButton(onPressed: _markAll, child: const Text('Mark all read')),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: Column(
@@ -177,7 +179,7 @@ class _InAppChatScreenState extends ConsumerState<InAppChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Chat · ${widget.peerTitle}')),
+      appBar: AppBar(title: Text('Chat · ${widget.peerTitle}'), actions: const [TwoBeeHomeAction()]),
       body: Column(
         children: [
           Expanded(
@@ -302,7 +304,7 @@ class _SupportLegalScreenState extends State<SupportLegalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(title: Text(widget.title), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -429,7 +431,10 @@ class _TermsAndPrivacyScreenState extends State<TermsAndPrivacyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_tab == 0 ? 'Terms of Service' : 'Privacy Policy')),
+      appBar: AppBar(
+        title: Text(_tab == 0 ? 'Terms of Service' : 'Privacy Policy'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

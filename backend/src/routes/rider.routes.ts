@@ -52,6 +52,7 @@ riderRouter.post(
       passcode: z.string().regex(/^\d{4}$/, 'Rider passcode must be 4 digits'),
       enableBiometric: z.boolean().default(false),
       documents: z.array(z.object({ docType: z.string(), fileUrl: z.string() })).default([]),
+      reRegisterDemo: z.boolean().default(false),
     });
     const parsed = schema.parse(req.body);
     if (['1234', '0000', '1111', '2222', '4321'].includes(parsed.passcode)) {
@@ -61,7 +62,7 @@ riderRouter.post(
     const prisma = getPrisma();
     const userId = req.auth!.userId;
     const existing = await prisma.riderProfile.findUnique({ where: { userId } });
-    if (existing) {
+    if (existing && !(env.nodeEnv !== 'production' && parsed.reRegisterDemo)) {
       throw new HttpError(409, 'RIDER_ALREADY_EXISTS', 'Rider profile already registered for this phone');
     }
 
@@ -82,36 +83,36 @@ riderRouter.post(
         data: { fullName: parsed.fullName, activeRole: 'RIDER' },
       });
 
-      const created = await tx.riderProfile.create({
-        data: {
-          userId,
-          kycStatus: 'PENDING',
-          passcodeHash,
-          biometricEnabled: parsed.enableBiometric,
-          dob: parsed.dob,
-          gender: parsed.gender,
-          preferredZoneId: parsed.preferredZoneId,
-          emergencyName: parsed.emergencyName,
-          emergencyRelation: parsed.emergencyRelation,
-          emergencyPhone: parsed.emergencyPhone,
-          nidNumber: parsed.nidNumber,
-          licenseNumber: parsed.licenseNumber,
-          licenseExpiry: parsed.licenseExpiry,
-          vehicleOwnership: parsed.vehicleOwnership,
-          powertrain: parsed.powertrain,
-          vehicleBrandModel: parsed.vehicleBrandModel,
-          plateNo: parsed.plateNo ?? (parsed.vehicleOwnership === 'RENTAL' ? '2BEE-EV-RENTAL' : 'DHK-METRO-NEW'),
-          frontCarrierVerified: false, // Becomes verified on Admin KYC approval when hasFront is true
-          frontCarrierLengthCm: hasFront ? parsed.frontCarrierLengthCm : null,
-          frontCarrierWidthCm: hasFront ? parsed.frontCarrierWidthCm : null,
-          frontCarrierHeightCm: hasFront ? parsed.frontCarrierHeightCm : null,
-          frontCarrierMaxKg: hasFront ? parsed.frontCarrierMaxKg : 0,
-          rearCarrierVerified: false,
-          multiServiceEnabled: parsed.multiServiceRequested && hasFront && parsed.spareHelmetConfirmed,
-          spareHelmetConfirmed: parsed.spareHelmetConfirmed,
-          isOnline: false,
-        },
-      });
+      const dataFields = {
+        kycStatus: 'PENDING' as const,
+        passcodeHash,
+        biometricEnabled: parsed.enableBiometric,
+        dob: parsed.dob,
+        gender: parsed.gender,
+        preferredZoneId: parsed.preferredZoneId,
+        emergencyName: parsed.emergencyName,
+        emergencyRelation: parsed.emergencyRelation,
+        emergencyPhone: parsed.emergencyPhone,
+        nidNumber: parsed.nidNumber,
+        licenseNumber: parsed.licenseNumber,
+        licenseExpiry: parsed.licenseExpiry,
+        vehicleOwnership: parsed.vehicleOwnership,
+        powertrain: parsed.powertrain,
+        vehicleBrandModel: parsed.vehicleBrandModel,
+        plateNo: parsed.plateNo ?? (parsed.vehicleOwnership === 'RENTAL' ? '2BEE-EV-RENTAL' : 'DHK-METRO-NEW'),
+        frontCarrierVerified: false,
+        frontCarrierLengthCm: hasFront ? parsed.frontCarrierLengthCm : null,
+        frontCarrierWidthCm: hasFront ? parsed.frontCarrierWidthCm : null,
+        frontCarrierHeightCm: hasFront ? parsed.frontCarrierHeightCm : null,
+        frontCarrierMaxKg: hasFront ? parsed.frontCarrierMaxKg : 0,
+        rearCarrierVerified: false,
+        multiServiceEnabled: parsed.multiServiceRequested && hasFront && parsed.spareHelmetConfirmed,
+        spareHelmetConfirmed: parsed.spareHelmetConfirmed,
+        isOnline: false,
+      };
+      const created = existing
+        ? await tx.riderProfile.update({ where: { id: existing.id }, data: dataFields })
+        : await tx.riderProfile.create({ data: { userId, ...dataFields } });
 
       if (parsed.documents.length > 0) {
         await tx.verificationDocument.createMany({
@@ -125,8 +126,14 @@ riderRouter.post(
         });
       }
 
-      await tx.payoutAccount.create({
-        data: {
+      await tx.payoutAccount.upsert({
+        where: { ownerRole_ownerId: { ownerRole: 'RIDER', ownerId: created.id } },
+        update: {
+          provider: parsed.payoutProvider,
+          accountNumber: parsed.payoutAccountNumber,
+          holderName: parsed.payoutHolderName,
+        },
+        create: {
           ownerRole: 'RIDER',
           ownerId: created.id,
           provider: parsed.payoutProvider,

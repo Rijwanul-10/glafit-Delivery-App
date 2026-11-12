@@ -306,6 +306,44 @@ if (env.nodeEnv !== 'production') {
       res.json({ ok: true, parcel, ride });
     }),
   );
+
+  protectedCommon.post(
+    '/demo/auto-verify-rider',
+    asyncHandler(async (req, res) => {
+      const prisma = getPrisma();
+      const rp = await prisma.riderProfile.findUnique({ where: { userId: req.auth!.userId } });
+      if (!rp) throw new HttpError(404, 'RIDER_NOT_FOUND', 'Rider profile not found');
+      const hasFront = rp.vehicleOwnership === 'RENTAL' || (rp.frontCarrierMaxKg ?? 0) > 0;
+      const updated = await prisma.riderProfile.update({
+        where: { id: rp.id },
+        data: {
+          kycStatus: 'APPROVED',
+          frontCarrierVerified: hasFront,
+          rearCarrierVerified: true,
+          multiServiceEnabled: hasFront && rp.spareHelmetConfirmed,
+          approvedAt: rp.approvedAt ?? new Date(),
+        },
+      });
+      res.json({ ok: true, profile: updated });
+    }),
+  );
+
+  protectedCommon.post(
+    '/demo/auto-verify-merchant',
+    asyncHandler(async (req, res) => {
+      const prisma = getPrisma();
+      const mp = await prisma.merchantProfile.findUnique({ where: { userId: req.auth!.userId } });
+      if (!mp) throw new HttpError(404, 'MERCHANT_NOT_FOUND', 'Merchant profile not found');
+      const updated = await prisma.merchantProfile.update({
+        where: { id: mp.id },
+        data: {
+          kycStatus: 'APPROVED',
+          approvedAt: mp.approvedAt ?? new Date(),
+        },
+      });
+      res.json({ ok: true, profile: updated });
+    }),
+  );
 }
 
 commonRouter.use('/', protectedCommon);

@@ -523,8 +523,6 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
     try {
       final authCtrl = ref.read(authControllerProvider.notifier);
       await authCtrl.switchRole(_selected);
-      final s = ref.read(authControllerProvider);
-      final roles = s.roles ?? {};
 
       if (!mounted) return;
       if (_selected == 'CLIENT') {
@@ -533,30 +531,13 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
       }
 
       if (_selected == 'RIDER') {
-        final rider = Map<String, dynamic>.from((roles['rider'] as Map?) ?? {});
-        if (rider['registered'] != true) {
-          context.go('/rider/register');
-        } else {
-          context.go('/rider/passcode'); // Always 4-digit passcode created at registration
-        }
+        context.go('/rider/passcode'); // Always opens Rider Passcode panel first (with Register option inside!)
         return;
       }
 
       if (_selected == 'MERCHANT') {
-        final merchant = Map<String, dynamic>.from((roles['merchant'] as Map?) ?? {});
-        if (merchant['registered'] != true) {
-          context.go('/merchant/type');
-        } else if (merchant['kycStatus'] == 'PENDING') {
-          // Business Rule 2c: No passcode needed while pending -> enters Home Pending locked!
-          context.go('/merchant/pending');
-        } else if (merchant['kycStatus'] == 'NEEDS_CHANGES') {
-          context.go('/merchant/needs-changes');
-        } else if (merchant['needsPostApprovalPinSetup'] == true) {
-          // Business Rule 2c: First login after approval MUST create fixed 6-digit passcode!
-          context.go('/merchant/post-approval-pin');
-        } else {
-          context.go('/merchant/passcode'); // Daily 6-digit login
-        }
+        context.go('/merchant/passcode'); // Always opens 6-digit Merchant Passcode panel first (with Register option inside!)
+        return;
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -630,8 +611,8 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
             ),
             const SizedBox(height: 12),
             _RoleCard(
-              title: 'Restaurant / Home Kitchen',
-              subtitle: 'Split Merchant Panel · Menu, Orders & Weekly Payouts',
+              title: 'Merchant',
+              subtitle: 'Physical Restaurant & Home Kitchen · Menu, Orders & Weekly Payouts',
               badge: merchantBadge,
               icon: Icons.storefront_rounded,
               selected: _selected == 'MERCHANT',

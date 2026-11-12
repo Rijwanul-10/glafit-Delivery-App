@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,11 +21,30 @@ class _MerchantHomePendingScreenState
     extends ConsumerState<MerchantHomePendingScreen> {
   Map<String, dynamic>? _pendingData;
   bool _loading = true;
+  Timer? _autoVerifyTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _autoVerifyTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleAutoVerifyIfPending() {
+    if (_autoVerifyTimer?.isActive == true) return;
+    _autoVerifyTimer = Timer(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      try {
+        await ref.read(apiClientProvider).post('/common/demo/auto-verify-merchant');
+        await ref.read(authControllerProvider.notifier).refreshRoles();
+        if (mounted) context.go('/merchant/post-approval-pin');
+      } catch (_) {}
+    });
   }
 
   Future<void> _load() async {
@@ -38,6 +58,8 @@ class _MerchantHomePendingScreenState
       final p = res['profile'] as Map?;
       if (mounted && p?['requiresPostApprovalPinSetup'] == true) {
         context.go('/merchant/post-approval-pin');
+      } else if (p?['kycStatus'] == 'PENDING') {
+        _scheduleAutoVerifyIfPending();
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -55,6 +77,7 @@ class _MerchantHomePendingScreenState
             onPressed: () => context.go('/roles'),
             child: const Text('Switch Role'),
           ),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: _loading
@@ -63,8 +86,8 @@ class _MerchantHomePendingScreenState
               padding: const EdgeInsets.all(16),
               children: [
                 const VerificationBanner(
-                  title: 'Verification in progress · Store stays closed until approval',
-                  subtitle: 'Once admin verifies your documents, your phone receives an approval notice to create your 6-digit passcode.',
+                  title: 'Verification in progress · Auto-verifying in 3s...',
+                  subtitle: 'Once verified, your phone receives the approval prompt to create your permanent 6-digit Merchant passcode.',
                   isErrorStyle: true,
                 ),
                 const SizedBox(height: 16),
@@ -239,7 +262,7 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
         title: Text(m['businessName'].toString()),
         actions: [
           Container(
-            margin: const EdgeInsets.only(right: 12),
+            margin: const EdgeInsets.only(right: 4),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: TwoBeeColors.surfaceTonal,
@@ -254,6 +277,7 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
               ),
             ),
           ),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: RefreshIndicator(
@@ -691,6 +715,7 @@ class _MerchantOrdersTabState extends ConsumerState<_MerchantOrdersTab> {
             label: const Text('Menu'),
           ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          const TwoBeeHomeAction(),
         ],
       ),
       body: Column(
@@ -818,7 +843,7 @@ class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
     final txs = (wallet['transactions'] as List?) ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Wallet & Earnings')),
+      appBar: AppBar(title: const Text('Wallet & Earnings'), actions: const [TwoBeeHomeAction()]),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -977,7 +1002,7 @@ class MerchantOrderDetailScreen extends ConsumerWidget {
     final commission = (order['commissionBdt'] as num?) ?? 0;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Order ${order['orderCode']}')),
+      appBar: AppBar(title: Text('Order ${order['orderCode']}'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1054,6 +1079,7 @@ class _MerchantSplitStoreTab extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(isHk ? 'Home Kitchen Store' : 'Restaurant Store'),
+        actions: const [TwoBeeHomeAction()],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -1262,7 +1288,7 @@ class _MerchantStaffAndSettingsScreenState extends ConsumerState<MerchantStaffAn
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Kitchen Settings & Staff')),
+      appBar: AppBar(title: const Text('Kitchen Settings & Staff'), actions: const [TwoBeeHomeAction()]),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: TwoBeeColors.primary,
         foregroundColor: Colors.white,
@@ -1361,7 +1387,7 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Menu Manager')),
+      appBar: AppBar(title: const Text('Menu Manager'), actions: const [TwoBeeHomeAction()]),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: TwoBeeColors.primary,
         foregroundColor: Colors.white,
@@ -1483,7 +1509,7 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
   Widget build(BuildContext context) {
     final isEdit = widget.existingItem != null;
     return Scaffold(
-      appBar: AppBar(title: Text(isEdit ? 'Edit Menu Item' : 'Add New Dish')),
+      appBar: AppBar(title: Text(isEdit ? 'Edit Menu Item' : 'Add New Dish'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1544,7 +1570,7 @@ class MerchantPayoutStatementScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Payout Statement')),
+      appBar: AppBar(title: const Text('Payout Statement'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1684,7 +1710,7 @@ class _MerchantPromotionsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Promotions & Offers')),
+      appBar: AppBar(title: const Text('Promotions & Offers'), actions: const [TwoBeeHomeAction()]),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: TwoBeeColors.primary,
         foregroundColor: Colors.white,
@@ -1765,7 +1791,7 @@ class _MerchantReviewsScreenState extends ConsumerState<MerchantReviewsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Customer Reviews')),
+      appBar: AppBar(title: const Text('Customer Reviews'), actions: const [TwoBeeHomeAction()]),
       body: _reviews.isEmpty
           ? const Center(child: Text('No customer reviews yet.'))
           : ListView(
@@ -1830,7 +1856,7 @@ class _MerchantSecurityScreenState
     final devices = (_storeInfo?['devices'] as List?) ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Security & 6-Digit PIN')),
+      appBar: AppBar(title: const Text('Security & 6-Digit PIN'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

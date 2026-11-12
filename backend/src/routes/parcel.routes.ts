@@ -24,10 +24,10 @@ parcelRouter.post(
     const schema = z.object({
       pickupLat: z.number(),
       pickupLng: z.number(),
-      pickupZoneId: z.string().optional(),
+      pickupZoneId: z.string().nullable().optional(),
       dropoffLat: z.number(),
       dropoffLng: z.number(),
-      dropoffZoneId: z.string().optional(),
+      dropoffZoneId: z.string().nullable().optional(),
       tier: z.enum(['NORMAL_ECO', 'NEXT_DAY', 'EXPRESS']).default('NORMAL_ECO'),
       weightKg: z.number().min(0.1).max(15).default(2.0),
       lengthCm: z.number().min(5).max(80).default(30),
@@ -40,8 +40,8 @@ parcelRouter.post(
 
     const [route, originZone, destinationZone, pricing] = await Promise.all([
       mapsService.estimateRoute(parsed.pickupLat, parsed.pickupLng, parsed.dropoffLat, parsed.dropoffLng),
-      resolveZoneByCoords(prisma, parsed.pickupLat, parsed.pickupLng, parsed.pickupZoneId),
-      resolveZoneByCoords(prisma, parsed.dropoffLat, parsed.dropoffLng, parsed.dropoffZoneId),
+      resolveZoneByCoords(prisma, parsed.pickupLat, parsed.pickupLng, parsed.pickupZoneId ?? undefined),
+      resolveZoneByCoords(prisma, parsed.dropoffLat, parsed.dropoffLng, parsed.dropoffZoneId ?? undefined),
       prisma.appPricingConfig.findUnique({ where: { id: 'default' } }),
     ]);
 
@@ -92,30 +92,30 @@ parcelRouter.post(
       heightCm: z.number().min(5).max(80).default(15),
       declaredValueBdt: z.number().min(0).default(1000),
       isProtected: z.boolean().default(false),
-      handlingNote: z.string().max(300).optional(),
+      handlingNote: z.string().max(300).nullable().optional(),
       senderName: z.string().min(2),
       senderPhone: z.string().min(10),
       pickupAddress: z.string().min(3),
-      pickupZoneId: z.string().optional(),
+      pickupZoneId: z.string().nullable().optional(),
       pickupLat: z.number(),
       pickupLng: z.number(),
       recipientName: z.string().min(2),
       recipientPhone: z.string().min(10),
       dropoffAddress: z.string().min(3),
-      dropoffZoneId: z.string().optional(),
+      dropoffZoneId: z.string().nullable().optional(),
       dropoffLat: z.number(),
       dropoffLng: z.number(),
       codCollectBdt: z.number().min(0).default(0),
       paymentMethod: z.enum(['COD', 'STRIPE_SANDBOX']),
-      stripePaymentIntentId: z.string().optional(),
+      stripePaymentIntentId: z.string().nullable().optional(),
     });
     const parsed = schema.parse(req.body);
     const prisma = getPrisma();
 
     const [route, originZone, destinationZone, pricing] = await Promise.all([
       mapsService.estimateRoute(parsed.pickupLat, parsed.pickupLng, parsed.dropoffLat, parsed.dropoffLng),
-      resolveZoneByCoords(prisma, parsed.pickupLat, parsed.pickupLng, parsed.pickupZoneId),
-      resolveZoneByCoords(prisma, parsed.dropoffLat, parsed.dropoffLng, parsed.dropoffZoneId),
+      resolveZoneByCoords(prisma, parsed.pickupLat, parsed.pickupLng, parsed.pickupZoneId ?? undefined),
+      resolveZoneByCoords(prisma, parsed.dropoffLat, parsed.dropoffLng, parsed.dropoffZoneId ?? undefined),
       prisma.appPricingConfig.findUnique({ where: { id: 'default' } }),
     ]);
 

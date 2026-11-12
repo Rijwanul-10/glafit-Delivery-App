@@ -58,6 +58,12 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
         'isProtected': _protected,
       });
       setState(() => _estimate = res);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not calculate estimate: $e'), backgroundColor: TwoBeeColors.errorText),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -71,6 +77,7 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
     }
     setState(() => _loading = true);
     try {
+      final note = _handlingNoteCtrl.text.trim();
       final res = await ref.read(apiClientProvider).post('/parcels/book', body: {
         'tier': _tier,
         'packageSizeClass': _sizeClass,
@@ -80,7 +87,7 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
         'widthCm': double.tryParse(_widthCtrl.text.trim()) ?? 20,
         'heightCm': double.tryParse(_heightCtrl.text.trim()) ?? 15,
         'declaredValueBdt': double.tryParse(_declaredValCtrl.text.trim()) ?? 1000,
-        'handlingNote': _handlingNoteCtrl.text.trim().isNotEmpty ? _handlingNoteCtrl.text.trim() : null,
+        if (note.isNotEmpty) 'handlingNote': note,
         'isProtected': _protected,
         'senderName': _senderName.text.trim(),
         'senderPhone': _senderPhone.text.trim(),
@@ -102,6 +109,12 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
         context,
         MaterialPageRoute(builder: (_) => ParcelTrackingScreen(parcelId: res['shipment']['id'] as String)),
       );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not dispatch parcel: $e'), backgroundColor: TwoBeeColors.errorText),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -110,7 +123,10 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_step == 0 ? '1. Hub & Rate Calculator' : _step == 1 ? '2. Package & Carrier Specs' : '3. Addresses & Payment')),
+      appBar: AppBar(
+        title: Text(_step == 0 ? '1. Hub & Rate Calculator' : _step == 1 ? '2. Package & Carrier Specs' : '3. Addresses & Payment'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -120,6 +136,18 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TwoBeeColors.textSecondary)),
           const SizedBox(height: 12),
           if (_step == 0) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(color: TwoBeeColors.surfaceTonal, borderRadius: BorderRadius.circular(12)),
+              child: const Row(
+                children: [
+                  Icon(Icons.electric_moped_rounded, color: TwoBeeColors.primary, size: 18),
+                  SizedBox(width: 8),
+                  Text('2Bee EV Fleet · Route & Speed Estimation', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: TwoBeeColors.primary)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -159,8 +187,8 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
               },
               child: Column(
                 children: [
-                  ('NORMAL_ECO', 'Standard Eco (~2–12h)', 'Starts ৳60 · Normal front-carrier eligible'),
-                  ('NEXT_DAY', 'Next-Day Saver', 'Starts ৳45 · Best value'),
+                  ('NORMAL_ECO', 'Standard Eco (~2–12h)', 'Starts ৳60 · Zero-Emission EV Courier'),
+                  ('NEXT_DAY', 'Next-Day Saver', 'Starts ৳45 · Best eco value'),
                   ('EXPRESS', 'Express Dedicated (~45m)', 'Starts ৳110 · Dedicated urgent courier'),
                 ]
                     .map((item) => Card(
@@ -329,11 +357,16 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const Text('PICKUP SENDER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.7, color: TwoBeeColors.primary)),
+                    const SizedBox(height: 8),
                     TextField(controller: _senderName, decoration: const InputDecoration(labelText: 'Sender Name')),
                     const SizedBox(height: 8),
                     TextField(controller: _senderPhone, decoration: const InputDecoration(labelText: 'Sender Phone')),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
+                    const Text('RECIPIENT DROPOFF', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.7, color: TwoBeeColors.primary)),
+                    const SizedBox(height: 8),
                     TextField(controller: _recipientName, decoration: const InputDecoration(labelText: 'Recipient Name')),
                     const SizedBox(height: 8),
                     TextField(controller: _recipientPhone, decoration: const InputDecoration(labelText: 'Recipient Phone')),
@@ -355,7 +388,7 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
                     onPressed: _loading ? null : _submitBooking,
                     child: Text(_loading
                         ? 'Dispatching...'
-                        : 'Confirm · ${bdt((_estimate?['breakdown']?['deliveryChargeBdt'] as num?) ?? 95)}'),
+                        : 'Confirm & Dispatch · ${bdt((_estimate?['breakdown']?['deliveryChargeBdt'] as num?) ?? 95)}'),
                   ),
                 ),
               ],
@@ -442,7 +475,7 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
     final courier = s['courier'] as Map?;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Parcel ${s['trackingCode']}')),
+      appBar: AppBar(title: Text('Parcel ${s['trackingCode']}'), actions: const [TwoBeeHomeAction()]),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -455,23 +488,37 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(s['statusBanner']?.toString() ?? 'Courier En-Route',
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: TwoBeeColors.primary)),
-                    const SizedBox(height: 6),
-                    Text('${s['pickupAddress']} → ${s['dropoffAddress']}'),
-                    const SizedBox(height: 10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Delivery Security PIN', style: TextStyle(fontWeight: FontWeight.w700)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          decoration: BoxDecoration(color: TwoBeeColors.obsidian, borderRadius: BorderRadius.circular(10)),
-                          child: Text(s['deliveryPin'].toString(),
-                              style: const TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 4)),
+                        Text(s['statusBanner']?.toString() ?? 'Courier En-Route',
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: TwoBeeColors.primary)),
+                        ActionChip(
+                          avatar: const Icon(Icons.copy_rounded, size: 14),
+                          label: Text(s['trackingCode'].toString(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
+                          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Tracking code ${s['trackingCode']} copied!')),
+                          ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 6),
+                    Text('${s['pickupAddress']} → ${s['dropoffAddress']}'),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('DELIVERY SECURITY PIN', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.7)),
+                        PinDigitsRow(pin: s['deliveryPin'].toString()),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('TRANSIT MILESTONES', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 0.7, color: TwoBeeColors.textSecondary)),
+                    const SizedBox(height: 4),
+                    Text('1. Booked & Confirmed · Done', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    Text('2. Courier Assigned · ${s['status'] == 'BOOKED' || s['status'] == 'MATCHING' ? 'Matching...' : 'Assigned'}', style: const TextStyle(fontSize: 12)),
+                    Text('3. Picked Up · In EV Transit · ${s['status'] == 'PICKED_UP' || s['status'] == 'IN_TRANSIT' || s['status'] == 'DELIVERED' ? 'Active/Done' : 'Pending'}', style: const TextStyle(fontSize: 12)),
+                    Text('4. Delivered via PIN · ${s['status'] == 'DELIVERED' ? 'Completed' : 'Pending'}', style: const TextStyle(fontSize: 12)),
                   ],
                 ),
               ),
@@ -607,7 +654,7 @@ class _ParcelDeliveredRatingScreenState extends ConsumerState<ParcelDeliveredRat
     final s = widget.shipment;
     final alreadyRated = s['rating'] != null;
     return Scaffold(
-      appBar: AppBar(title: const Text('Parcel Delivered & Receipt')),
+      appBar: AppBar(title: const Text('Parcel Delivered & Receipt'), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [

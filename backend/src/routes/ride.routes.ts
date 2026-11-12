@@ -25,18 +25,18 @@ rideRouter.post(
     const schema = z.object({
       pickupLat: z.number(),
       pickupLng: z.number(),
-      pickupZoneId: z.string().optional(),
+      pickupZoneId: z.string().nullable().optional(),
       dropoffLat: z.number(),
       dropoffLng: z.number(),
-      dropoffZoneId: z.string().optional(),
-      promoCode: z.string().optional(),
+      dropoffZoneId: z.string().nullable().optional(),
+      promoCode: z.string().nullable().optional(),
     });
     const parsed = schema.parse(req.body);
     const prisma = getPrisma();
     const [route, originZone, destinationZone] = await Promise.all([
       mapsService.estimateRoute(parsed.pickupLat, parsed.pickupLng, parsed.dropoffLat, parsed.dropoffLng),
-      resolveZoneByCoords(prisma, parsed.pickupLat, parsed.pickupLng, parsed.pickupZoneId),
-      resolveZoneByCoords(prisma, parsed.dropoffLat, parsed.dropoffLng, parsed.dropoffZoneId),
+      resolveZoneByCoords(prisma, parsed.pickupLat, parsed.pickupLng, parsed.pickupZoneId ?? undefined),
+      resolveZoneByCoords(prisma, parsed.dropoffLat, parsed.dropoffLng, parsed.dropoffZoneId ?? undefined),
     ]);
 
     const promoDiscount = parsed.promoCode?.toUpperCase() === '2BEE10' ? 10 : 0;
@@ -71,22 +71,22 @@ rideRouter.post(
       pickupAddress: z.string().min(2),
       pickupLat: z.number(),
       pickupLng: z.number(),
-      pickupZoneId: z.string().optional(),
+      pickupZoneId: z.string().nullable().optional(),
       dropoffAddress: z.string().min(2),
       dropoffLat: z.number(),
       dropoffLng: z.number(),
-      dropoffZoneId: z.string().optional(),
-      promoCode: z.string().optional(),
+      dropoffZoneId: z.string().nullable().optional(),
+      promoCode: z.string().nullable().optional(),
       paymentMethod: z.enum(['COD', 'STRIPE_SANDBOX']),
-      stripePaymentIntentId: z.string().optional(),
+      stripePaymentIntentId: z.string().nullable().optional(),
     });
     const parsed = schema.parse(req.body);
     const prisma = getPrisma();
 
     const [route, originZone, destinationZone] = await Promise.all([
       mapsService.estimateRoute(parsed.pickupLat, parsed.pickupLng, parsed.dropoffLat, parsed.dropoffLng),
-      resolveZoneByCoords(prisma, parsed.pickupLat, parsed.pickupLng, parsed.pickupZoneId),
-      resolveZoneByCoords(prisma, parsed.dropoffLat, parsed.dropoffLng, parsed.dropoffZoneId),
+      resolveZoneByCoords(prisma, parsed.pickupLat, parsed.pickupLng, parsed.pickupZoneId ?? undefined),
+      resolveZoneByCoords(prisma, parsed.dropoffLat, parsed.dropoffLng, parsed.dropoffZoneId ?? undefined),
     ]);
 
     const tier = FLEET_TIERS.find((t) => t.id === parsed.fleetTier) ?? FLEET_TIERS[0];

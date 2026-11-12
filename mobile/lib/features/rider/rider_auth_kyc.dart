@@ -90,6 +90,7 @@ class _RiderRegWizardScreenState extends ConsumerState<RiderRegWizardScreen> {
         'payoutAccountNumber': _payoutNoCtrl.text.trim(),
         'payoutHolderName': _nameCtrl.text.trim().isEmpty ? 'Md. Rafiqul Islam' : _nameCtrl.text.trim(),
         'passcode': _passcode,
+        'reRegisterDemo': true,
       });
       ref.read(authControllerProvider.notifier).setRiderToken(res['roleToken'] as String);
       await ref.read(authControllerProvider.notifier).refreshRoles();
@@ -121,7 +122,7 @@ class _RiderRegWizardScreenState extends ConsumerState<RiderRegWizardScreen> {
     final volCm3 = (double.tryParse(_fLenCtrl.text) ?? 35) * (double.tryParse(_fWidCtrl.text) ?? 30) * (double.tryParse(_fHgtCtrl.text) ?? 30);
 
     return Scaffold(
-      appBar: AppBar(title: Text(titles[_step])),
+      appBar: AppBar(title: Text(titles[_step]), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -481,7 +482,7 @@ class _RiderEnterPasscodeScreenState extends ConsumerState<RiderEnterPasscodeScr
   Widget build(BuildContext context) {
     final name = ref.watch(authControllerProvider).user?['fullName']?.toString() ?? 'Rider';
     return Scaffold(
-      appBar: AppBar(title: const Text('Rider Passcode Verification')),
+      appBar: AppBar(title: const Text('Rider Passcode Verification'), actions: const [TwoBeeHomeAction()]),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -512,6 +513,12 @@ class _RiderEnterPasscodeScreenState extends ConsumerState<RiderEnterPasscodeScr
                 onPressed: () => context.push('/rider/forgot-passcode'),
                 child: const Text('Forgot passcode? (Reset via OTP + NID)'),
               ),
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: () => context.push('/rider/register'),
+                icon: const Icon(Icons.person_add_alt_1_rounded),
+                label: const Text('New Rider? Register / Setup KYC ->'),
+              ),
             ],
           ),
         ),
@@ -537,7 +544,7 @@ class _RiderForgotPasscodeScreenState extends ConsumerState<RiderForgotPasscodeS
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset 4-Digit Rider PIN')),
+      appBar: AppBar(title: const Text('Reset 4-Digit Rider PIN'), actions: const [TwoBeeHomeAction()]),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(

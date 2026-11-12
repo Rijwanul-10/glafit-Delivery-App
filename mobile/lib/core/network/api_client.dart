@@ -318,6 +318,7 @@ class AuthController extends StateNotifier<AuthSessionState> {
 
 final socketServiceProvider = Provider<SocketService>((ref) => SocketService());
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient(ref));
+final clientTabIndexProvider = StateProvider<int>((ref) => 0);
 final authControllerProvider =
     StateNotifierProvider<AuthController, AuthSessionState>((ref) => AuthController(ref));
 
