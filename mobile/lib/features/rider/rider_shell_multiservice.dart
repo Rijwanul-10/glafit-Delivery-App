@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -321,6 +322,111 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
     }
   }
 
+  Future<void> _seedSampleDispatch() async {
+    await ref.read(apiClientProvider).post('/common/demo/seed-dispatch');
+    await _load();
+  }
+
+  Future<bool> _showIncomingOfferModal({
+    required String badge,
+    required String title,
+    required String subtitle,
+    required num payoutBdt,
+    required String paymentLabel,
+    bool isMultiService = false,
+    int countdownSecs = 15,
+  }) async {
+    int secs = countdownSecs;
+    Timer? timer;
+    final accepted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          timer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+            if (!ctx.mounted) return;
+            if (secs <= 1) {
+              timer?.cancel();
+              if (Navigator.canPop(ctx)) Navigator.pop(ctx, false);
+            } else {
+              setS(() => secs--);
+            }
+          });
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Chip(
+                      label: Text(badge, style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+                      backgroundColor: TwoBeeColors.surfaceTonal,
+                    ),
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: TwoBeeColors.obsidian,
+                      child: Text('${secs}s', style: const TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w900)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(subtitle, style: const TextStyle(color: TwoBeeColors.textSecondary)),
+                const SizedBox(height: 12),
+                Card(
+                  color: TwoBeeColors.obsidian,
+                  child: ListTile(
+                    title: const Text('ESTIMATED RIDER PAYOUT', style: TextStyle(color: TwoBeeColors.primarySoft, fontSize: 11, fontWeight: FontWeight.w700)),
+                    subtitle: Text(paymentLabel, style: const TextStyle(color: Colors.white70)),
+                    trailing: Text(bdt(payoutBdt), style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+                  ),
+                ),
+                if (isMultiService)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      '✓ Fits Front Carrier (<=8kg) · Zone A → Zone B Ride Add-On Eligible',
+                      style: TextStyle(fontWeight: FontWeight.w700, color: TwoBeeColors.primary, fontSize: 12),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          timer?.cancel();
+                          Navigator.pop(ctx, false);
+                        },
+                        child: const Text('Decline'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          timer?.cancel();
+                          Navigator.pop(ctx, true);
+                        },
+                        child: Text('Accept (${secs}s)'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    timer?.cancel();
+    return accepted == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final parcels = (_open?['parcel'] as List?) ?? [];
@@ -336,6 +442,13 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
               padding: const EdgeInsets.all(16),
               children: [
                 const TwoBeeMapPreview(height: 170),
+                const SizedBox(height: 10),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: TwoBeeColors.obsidian),
+                  onPressed: _seedSampleDispatch,
+                  icon: const Icon(Icons.bolt_rounded),
+                  label: const Text('Preview: Seed Banani → Uttara Parcel & Ride Ping'),
+                ),
                 const SizedBox(height: 14),
                 if (addons.isNotEmpty) ...[
                   const Text('ZONE A → B MATCHING RIDE ADD-ONS (12s)', style: TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
@@ -349,6 +462,16 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
                           trailing: ElevatedButton(
                             style: ElevatedButton.styleFrom(minimumSize: const Size(90, 38)),
                             onPressed: () async {
+                              final ok = await _showIncomingOfferModal(
+                                badge: 'ZONE A → B RIDE ADD-ON',
+                                title: 'Co-Ride ${r['tripCode']} · 3-Stop Sequence',
+                                subtitle: '1. Pickup Passenger (${r['pickupAddress']})\n2. Drop Passenger FIRST (${r['dropoffAddress']})\n3. Deliver Front-Rack Parcel SECOND',
+                                payoutBdt: r['riderPayoutBdt'] as num,
+                                paymentLabel: 'Payment: ${r['paymentMethod']} · Zone A → B Verified',
+                                isMultiService: true,
+                                countdownSecs: 12,
+                              );
+                              if (!ok) return;
                               final token = ref.read(authControllerProvider).riderRoleToken;
                               final jobs = await ref.read(apiClientProvider).get('/rider/panel/jobs', roleToken: token);
                               final liveParcels = (jobs['live']?['parcels'] as List?) ?? [];
@@ -363,7 +486,7 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
                                 );
                               }
                             },
-                            child: const Text('Accept'),
+                            child: const Text('Review 12s'),
                           ),
                         ),
                       )),
@@ -371,7 +494,7 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
                 const Text('Parcel Requests', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                 const SizedBox(height: 8),
                 if (parcels.isEmpty)
-                  const Card(child: Padding(padding: EdgeInsets.all(14), child: Text('No waiting parcels right now.')))
+                  const Card(child: Padding(padding: EdgeInsets.all(14), child: Text('No waiting parcels right now. Tap Preview above to generate one!')))
                 else
                   ...parcels.map((p) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -381,6 +504,15 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
                           isThreeLine: true,
                           trailing: FilledButton(
                             onPressed: () async {
+                              final ok = await _showIncomingOfferModal(
+                                badge: p['fitsFrontCarrier'] == true ? 'NORMAL PARCEL · MULTI-SERVICE' : 'PARCEL DISPATCH',
+                                title: '${p['trackingCode']} (${p['weightKg']} kg)',
+                                subtitle: '${p['pickupAddress']} → ${p['dropoffAddress']}',
+                                payoutBdt: p['riderPayoutBdt'] as num,
+                                paymentLabel: 'COD Collect: ${bdt(p['codCollectBdt'] ?? 0)} · ${p['paymentMethod']}',
+                                isMultiService: p['fitsFrontCarrier'] == true,
+                              );
+                              if (!ok) return;
                               final token = ref.read(authControllerProvider).riderRoleToken;
                               try {
                                 await ref.read(apiClientProvider).post('/rider/panel/parcel/${p['id']}/accept', roleToken: token);
@@ -405,6 +537,14 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
                         subtitle: Text('Dropoff: ${f['deliveryAddress']}'),
                         trailing: FilledButton(
                           onPressed: () async {
+                            final ok = await _showIncomingOfferModal(
+                              badge: 'FOOD DELIVERY',
+                              title: 'Order ${f['orderCode']} · ${f['merchant']?['businessName'] ?? ''}',
+                              subtitle: 'Dropoff: ${f['deliveryAddress']} (Single-service Food)',
+                              payoutBdt: f['riderPayoutBdt'] as num,
+                              paymentLabel: 'Payment: ${f['paymentMethod']}',
+                            );
+                            if (!ok) return;
                             final token = ref.read(authControllerProvider).riderRoleToken;
                             await ref.read(apiClientProvider).post('/rider/panel/food/${f['id']}/accept', roleToken: token);
                             if (context.mounted) {
@@ -423,6 +563,14 @@ class _LookingForRequestsScreenState extends ConsumerState<LookingForRequestsScr
                         subtitle: Text('${r['pickupAddress']} → ${r['dropoffAddress']} (Locks Multi-Service)'),
                         trailing: FilledButton(
                           onPressed: () async {
+                            final ok = await _showIncomingOfferModal(
+                              badge: 'SOLO RIDE REQUEST',
+                              title: 'Ride ${r['tripCode']}',
+                              subtitle: '${r['pickupAddress']} → ${r['dropoffAddress']}\nNote: Ride-first trips lock out Multi-Service.',
+                              payoutBdt: r['riderPayoutBdt'] as num,
+                              paymentLabel: 'Payment: ${r['paymentMethod']}',
+                            );
+                            if (!ok) return;
                             final token = ref.read(authControllerProvider).riderRoleToken;
                             await ref.read(apiClientProvider).post('/rider/panel/ride/${r['id']}/accept', roleToken: token);
                             if (context.mounted) {
@@ -450,16 +598,14 @@ class ParcelPickupScreen extends ConsumerStatefulWidget {
 }
 
 class _ParcelPickupScreenState extends ConsumerState<ParcelPickupScreen> {
-  final _weightCtrl = TextEditingController(text: '2.1');
-  final _pinCtrl = TextEditingController();
-  bool _pickedUp = false;
-  bool _msEligible = false;
-  String? _ineligibleReason;
+  final _weightCtrl = TextEditingController(text: '2.0');
+  bool _frontRackLoaded = true;
+  bool _proofPhoto = true;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Parcel Pickup & Front Rack')),
+      appBar: AppBar(title: const Text('Parcel Pickup (Multi-Service)')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -467,95 +613,249 @@ class _ParcelPickupScreenState extends ConsumerState<ParcelPickupScreen> {
             color: TwoBeeColors.surfaceTonal,
             child: ListTile(
               leading: const Icon(Icons.inventory_2_outlined, color: TwoBeeColors.primary),
-              title: const Text('Front Carrier Multi-Service Setup', style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: const Text('Normal parcel only · <= 8.0 kg & <= 31,500 cm3 leaves rear seat free for Zone A -> B Ride Add-On.'),
+              title: const Text('Step 1/2 · Weigh & Measure Front Rack', style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Normal parcel <= 8.0 kg & <= 31,500 cm3 leaves rear pillion seat free for Zone A -> B Ride Add-On.'),
               trailing: IconButton(
                 icon: const Icon(Icons.info_outline),
-                onPressed: () => showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('2Bee Multi-Service Carrying Rules'),
-                    content: const Text(
-                      '1. Only NORMAL parcels (no Express/Urgent, no Food).\n'
-                      '2. Parcel fits strictly in Front Carrier (<= 8.0 kg and <= 31,500 cm3).\n'
-                      '3. Matching Ride Add-On shares Zone A pickup & Zone B dropoff.\n'
-                      '4. Stop 1 drops Passenger FIRST, Stop 2 delivers Parcel SECOND.\n'
-                      '5. Isolated tracking: Client & Passenger never see each other.',
-                    ),
-                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Got It'))],
-                  ),
-                ),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CarryingSetupScreen())),
               ),
             ),
           ),
           const SizedBox(height: 12),
-          if (!_pickedUp) ...[
-            TextField(controller: _weightCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Actual Verified Weight (kg, Max 8.0 front)')),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: () async {
-                final token = ref.read(authControllerProvider).riderRoleToken;
-                final res = await ref.read(apiClientProvider).post('/rider/panel/parcel/${widget.parcelId}/pickup', roleToken: token, body: {
+          TextField(
+            controller: _weightCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Actual Verified Weight (kg, Max 8.0 front)'),
+          ),
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            value: _frontRackLoaded,
+            onChanged: (v) => setState(() => _frontRackLoaded = v ?? true),
+            title: const Text('Step 2/2 · Placed Safely in Front Cargo Rack'),
+            subtitle: const Text('Rear Passenger Pillion Seat Reserved & Clear'),
+          ),
+          CheckboxListTile(
+            value: _proofPhoto,
+            onChanged: (v) => setState(() => _proofPhoto = v ?? true),
+            title: const Text('Camera Proof of Loading Photo Captured'),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () async {
+              final token = ref.read(authControllerProvider).riderRoleToken;
+              final res = await ref.read(apiClientProvider).post(
+                '/rider/panel/parcel/${widget.parcelId}/pickup',
+                roleToken: token,
+                body: {
                   'actualWeightKg': double.tryParse(_weightCtrl.text) ?? 2.0,
                   'pickupPhotoUrl': '/uploads/front-rack-proof.jpg',
-                });
-                setState(() {
-                  _pickedUp = true;
-                  _msEligible = res['multiServiceEligible'] == true;
-                  _ineligibleReason = res['ineligibleReason'] as String?;
-                });
-              },
-              child: const Text('Confirm Picked Up & Proof Photo'),
-            ),
-          ] else ...[
-            VerificationBanner(
-              title: _msEligible ? 'Multi-Service Ride Radar Active (Zone A → B)' : 'Single-Service Locked',
-              subtitle: _msEligible
-                  ? 'Matching Zone A -> Zone B passenger rides can now be added!'
-                  : (_ineligibleReason ?? 'Not eligible for co-ride'),
-              isErrorStyle: !_msEligible,
-            ),
-            const SizedBox(height: 14),
-            if (_msEligible)
-              OutlinedButton.icon(
-                onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LookingForRequestsScreen())),
-                icon: const Icon(Icons.radar_rounded),
-                label: const Text('Check Matching Zone A → B Ride Add-ons'),
-              )
-            else
-              OutlinedButton.icon(
-                onPressed: () => showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('Multi-Service Unavailable'),
-                    content: Text(_ineligibleReason ?? 'This shipment exceeds front-carrier bounds or is not a Normal parcel-first leg.'),
-                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Understood'))],
+                },
+              );
+              final eligible = res['multiServiceEligible'] == true;
+              final reason = res['ineligibleReason'] as String?;
+              if (!context.mounted) return;
+              if (eligible) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ParcelDeliverScreen(parcelId: widget.parcelId, multiServiceEligible: true),
                   ),
-                ),
-                icon: const Icon(Icons.lock_outline),
-                label: const Text('Why Multi-Service Locked?'),
-              ),
-            const SizedBox(height: 16),
-            TextField(controller: _pinCtrl, maxLength: 4, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Customer 4-digit Delivery PIN')),
-            ElevatedButton(
-              onPressed: () async {
-                final token = ref.read(authControllerProvider).riderRoleToken;
-                await ref.read(apiClientProvider).post('/rider/panel/parcel/${widget.parcelId}/deliver', roleToken: token, body: {
-                  'deliveryPin': _pinCtrl.text.trim(),
-                });
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: const Text('Complete Parcel Delivery'),
-            ),
-          ],
+                );
+              } else {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MultiServiceUnavailableScreen(reason: reason ?? 'Exceeds front-carrier limit or not a Normal parcel-first leg.'),
+                  ),
+                );
+                if (context.mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ParcelDeliverScreen(parcelId: widget.parcelId, multiServiceEligible: false, reason: reason),
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Slide / Confirm Picked Up ->'),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Rider Multi-Service Execution Screen (Stop 1: Drop Passenger FIRST -> Stop 2: Deliver Parcel SECOND)
-/// Visible EXCLUSIVELY on Rider side!
+class MultiServiceUnavailableScreen extends StatelessWidget {
+  final String reason;
+  const MultiServiceUnavailableScreen({super.key, required this.reason});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Multi-Service Status')),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            VerificationBanner(
+              title: 'Single-Service Mode Locked',
+              subtitle: reason,
+              isErrorStyle: true,
+            ),
+            const SizedBox(height: 16),
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Why Co-Rides Are Locked on This Task:', style: TextStyle(fontWeight: FontWeight.w800)),
+                    SizedBox(height: 8),
+                    Text('• Multi-service ONLY pairs NORMAL Front-Carrier parcels (<= 8.0 kg & <= 31,500 cm3).'),
+                    SizedBox(height: 4),
+                    Text('• Express/Urgent parcels, Food orders, or Ride-first trips never combine with another service.'),
+                    SizedBox(height: 4),
+                    Text('• Front carrier + spare helmet must both be active.'),
+                  ],
+                ),
+              ),
+            ),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Got It · Continue Parcel Delivery ->'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ParcelDeliverScreen extends ConsumerStatefulWidget {
+  final String parcelId;
+  final bool multiServiceEligible;
+  final String? reason;
+  const ParcelDeliverScreen({
+    super.key,
+    required this.parcelId,
+    required this.multiServiceEligible,
+    this.reason,
+  });
+
+  @override
+  ConsumerState<ParcelDeliverScreen> createState() => _ParcelDeliverScreenState();
+}
+
+class _ParcelDeliverScreenState extends ConsumerState<ParcelDeliverScreen> {
+  final _pinCtrl = TextEditingController();
+  List<dynamic> _addons = [];
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.multiServiceEligible) _checkRadar();
+  }
+
+  Future<void> _checkRadar() async {
+    final token = ref.read(authControllerProvider).riderRoleToken;
+    setState(() => _loading = true);
+    try {
+      final res = await ref.read(apiClientProvider).get('/rider/panel/dispatch/open', roleToken: token);
+      if (mounted) setState(() => _addons = (res['multiServiceRideAddons'] as List?) ?? []);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Parcel Deliver (Multi-Service)'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.emergency_rounded, color: TwoBeeColors.errorText),
+            onPressed: () => showSosSafetySheet(context, ref, role: 'RIDER', orderId: widget.parcelId),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const TwoBeeMapPreview(height: 180),
+          const SizedBox(height: 12),
+          VerificationBanner(
+            title: widget.multiServiceEligible ? 'RIDE RADAR ACTIVE · Zone A → Zone B Corridor' : 'Single-Service Delivery',
+            subtitle: widget.multiServiceEligible
+                ? 'Front rack holding normal parcel; scanning Zone A → Zone B passenger ride add-ons.'
+                : (widget.reason ?? 'Single-service lock active'),
+            isErrorStyle: !widget.multiServiceEligible,
+          ),
+          const SizedBox(height: 12),
+          if (widget.multiServiceEligible) ...[
+            if (_loading) const LinearProgressIndicator(),
+            if (_addons.isNotEmpty)
+              ..._addons.map((r) => Card(
+                    color: TwoBeeColors.surfaceTonal,
+                    child: ListTile(
+                      title: Text('12s Ride Add-On: ${r['tripCode']} (+${bdt(r['riderPayoutBdt'] as num)})',
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                      subtitle: Text('Stop 1 Drop Pax (${r['dropoffAddress']}) -> Stop 2 Parcel'),
+                      trailing: ElevatedButton(
+                        style: ElevatedButton.styleFrom(minimumSize: const Size(86, 38)),
+                        onPressed: () async {
+                          final token = ref.read(authControllerProvider).riderRoleToken;
+                          final batchRes = await ref.read(apiClientProvider).post(
+                            '/rider/panel/multi-service/accept-ride-addon',
+                            roleToken: token,
+                            body: {'rideTripId': r['id'], 'parcelId': widget.parcelId},
+                          );
+                          if (context.mounted) {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PassengerPickupScreen(batch: Map<String, dynamic>.from(batchRes['batch'] as Map)),
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('Accept'),
+                      ),
+                    ),
+                  ))
+            else
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await ref.read(apiClientProvider).post('/common/demo/seed-dispatch');
+                  await _checkRadar();
+                },
+                icon: const Icon(Icons.radar_rounded),
+                label: const Text('Scan / Seed Matching Zone A → B Ride Add-On'),
+              ),
+            const SizedBox(height: 12),
+          ],
+          TextField(controller: _pinCtrl, maxLength: 4, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Customer 4-Digit Delivery PIN')),
+          ElevatedButton(
+            onPressed: () async {
+              final token = ref.read(authControllerProvider).riderRoleToken;
+              await ref.read(apiClientProvider).post('/rider/panel/parcel/${widget.parcelId}/deliver', roleToken: token, body: {
+                'deliveryPin': _pinCtrl.text.trim(),
+              });
+              if (context.mounted) Navigator.popUntil(context, (r) => r.isFirst);
+            },
+            child: const Text('Slide when Arrived · Complete Solo Parcel Delivery ->'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dispatcher wrapper keeping MultiServiceBatchScreen(batchId) cleanly routed to the exact dedicated step screen!
 class MultiServiceBatchScreen extends ConsumerStatefulWidget {
   final String batchId;
   const MultiServiceBatchScreen({super.key, required this.batchId});
@@ -565,124 +865,314 @@ class MultiServiceBatchScreen extends ConsumerStatefulWidget {
 }
 
 class _MultiServiceBatchScreenState extends ConsumerState<MultiServiceBatchScreen> {
-  Map<String, dynamic>? _batch;
-  final _startPinCtrl = TextEditingController();
-  final _deliveryPinCtrl = TextEditingController();
-  bool _paxHelmet = true;
-  bool _helmetReturned = true;
-  bool _curbOk = true;
-  bool _loading = true;
-
   @override
   void initState() {
     super.initState();
-    _load();
+    Future.microtask(_route);
   }
 
-  Future<void> _load() async {
+  Future<void> _route() async {
     final token = ref.read(authControllerProvider).riderRoleToken;
-    setState(() => _loading = true);
-    try {
-      final res = await ref.read(apiClientProvider).get('/rider/panel/jobs/batch/${widget.batchId}', roleToken: token);
-      setState(() => _batch = Map<String, dynamic>.from(res['batch'] as Map));
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    final res = await ref.read(apiClientProvider).get('/rider/panel/jobs/batch/${widget.batchId}', roleToken: token);
+    final b = Map<String, dynamic>.from(res['batch'] as Map);
+    final st = b['status'] as String;
+    if (!mounted) return;
+    Widget target;
+    if (st == 'PASSENGER_PICKUP_PENDING') {
+      target = PassengerPickupScreen(batch: b);
+    } else if (st == 'PASSENGER_ONBOARD') {
+      target = MultiServiceLiveScreen(batch: b);
+    } else if (st == 'PASSENGER_DROPPED') {
+      target = FinalParcelDeliveryScreen(batch: b);
+    } else {
+      target = BatchCompletionSummaryScreen(batch: b);
     }
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => target));
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (_loading || _batch == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    final b = _batch!;
-    final status = b['status'] as String;
-    final ride = b['rideTrip'] as Map;
-    final parcel = b['parcelShipment'] as Map;
+  Widget build(BuildContext context) => const Scaffold(body: Center(child: CircularProgressIndicator()));
+}
 
+/// Dedicated Screen: Passenger Pickup (Multi-Service)
+class PassengerPickupScreen extends ConsumerStatefulWidget {
+  final Map<String, dynamic> batch;
+  const PassengerPickupScreen({super.key, required this.batch});
+
+  @override
+  ConsumerState<PassengerPickupScreen> createState() => _PassengerPickupScreenState();
+}
+
+class _PassengerPickupScreenState extends ConsumerState<PassengerPickupScreen> {
+  final _pinCtrl = TextEditingController();
+  bool _paxHelmet = true;
+  bool _saving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = widget.batch;
+    final ride = b['rideTrip'] as Map;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Passenger Pickup (Multi-Service)')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const VerificationBanner(
+            title: 'Front Carrier Occupied · Rear Pillion Reserved',
+            subtitle: 'Check Passenger 4-digit Start PIN and helmet before departing.',
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const CircleAvatar(backgroundColor: TwoBeeColors.surfaceTonal, child: Icon(Icons.person_pin_circle, color: TwoBeeColors.primary)),
+              title: Text('${ride['user']?['fullName'] ?? 'Passenger'} · Trip ${ride['tripCode']}', style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('Pickup: ${ride['pickupAddress']}\nExpected Start PIN: ${ride['startPin']}'),
+              isThreeLine: true,
+              trailing: IconButton(
+                icon: const Icon(Icons.chat_outlined, color: TwoBeeColors.primary),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InAppChatScreen(serviceType: 'RIDE', orderId: ride['id'] as String, peerTitle: 'Passenger'))),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(controller: _pinCtrl, maxLength: 4, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Enter Passenger 4-Digit Start PIN')),
+          CheckboxListTile(value: _paxHelmet, onChanged: (v) => setState(() => _paxHelmet = v ?? false), title: const Text('Passenger wearing verified helmet')),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _saving
+                ? null
+                : () async {
+                    setState(() => _saving = true);
+                    try {
+                      final token = ref.read(authControllerProvider).riderRoleToken;
+                      await ref.read(apiClientProvider).post(
+                        '/rider/panel/multi-service/${b['id']}/passenger-pickup',
+                        roleToken: token,
+                        body: {'startPin': _pinCtrl.text.trim(), 'passengerHasHelmet': _paxHelmet},
+                      );
+                      final refreshed = await ref.read(apiClientProvider).get('/rider/panel/jobs/batch/${b['id']}', roleToken: token);
+                      if (context.mounted) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => MultiServiceLiveScreen(batch: Map<String, dynamic>.from(refreshed['batch'] as Map))),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _saving = false);
+                    }
+                  },
+            child: const Text('Start Trip · Stop 1 Passenger Leg ->'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dedicated Screen: Multi-Service Live (Stop 1 Passenger -> Stop 2 Parcel)
+class MultiServiceLiveScreen extends StatelessWidget {
+  final Map<String, dynamic> batch;
+  const MultiServiceLiveScreen({super.key, required this.batch});
+
+  @override
+  Widget build(BuildContext context) {
+    final ride = batch['rideTrip'] as Map;
+    final parcel = batch['parcelShipment'] as Map;
     return Scaffold(
       appBar: AppBar(
-        title: Text('Multi-Service ${b['batchCode']}'),
+        title: const Text('Active Multi-Service'),
         actions: [
           IconButton(
+            tooltip: 'Open in Maps',
             icon: const Icon(Icons.map_outlined),
-            onPressed: () => launchUrl(Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${ride['dropoffLat']},${ride['dropoffLng']}')),
+            onPressed: () => launchUrl(
+              Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${ride['dropoffLat'] ?? 23.8726},${ride['dropoffLng'] ?? 90.3983}'),
+            ),
           ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
-            color: TwoBeeColors.obsidian,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Corridor: ${b['originZoneId']} → ${b['destinationZoneId']}', style: const TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w700)),
-                  Text('Total Batch Payout: ${bdt(b['totalPayoutBdt'] as num)}', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  Text('Stage: $status', style: const TextStyle(color: Colors.white70)),
-                ],
-              ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: TwoBeeColors.obsidian, borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('CORRIDOR ${batch['originZoneId']} → ${batch['destinationZoneId']}', style: const TextStyle(color: TwoBeeColors.primarySoft, fontSize: 12, fontWeight: FontWeight.w700)),
+                Text('Combined Payout: ${bdt(batch['totalPayoutBdt'] as num)}', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+                const Text('Safety Rule: Passenger drops FIRST at Stop 1 before Stop 2 Parcel.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+              ],
             ),
           ),
           const SizedBox(height: 12),
+          const TwoBeeMapPreview(height: 170),
+          const SizedBox(height: 12),
           Card(
+            color: TwoBeeColors.surfaceTonal,
             child: ListTile(
-              title: Text('STOP 1 · Drop Passenger FIRST: ${ride['user']?['fullName'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: Text('${ride['pickupAddress']} → ${ride['dropoffAddress']} · PIN: ${ride['startPin']}'),
-              trailing: Text(ride['status'].toString(), style: const TextStyle(fontWeight: FontWeight.w700, color: TwoBeeColors.primary)),
+              leading: const CircleAvatar(backgroundColor: TwoBeeColors.primary, child: Text('1', style: TextStyle(color: Colors.white))),
+              title: Text('STOP 1 · Drop Passenger First (${ride['dropoffAddress']})', style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: const Text('Active Passenger Leg'),
             ),
           ),
           const SizedBox(height: 8),
           Card(
             child: ListTile(
-              title: Text('STOP 2 · Deliver Parcel SECOND: ${parcel['recipientName']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: Text('${parcel['dropoffAddress']} · COD ${bdt(parcel['codCollectBdt'] ?? 0)} · PIN: ${parcel['deliveryPin']}'),
-              trailing: Text(parcel['status'].toString()),
+              leading: const CircleAvatar(child: Text('2')),
+              title: Text('STOP 2 · Deliver Front-Rack Parcel (${parcel['dropoffAddress']})'),
+              subtitle: const Text('Queued until Stop 1 Passenger dropoff completes'),
             ),
           ),
-          const SizedBox(height: 16),
-          if (status == 'PASSENGER_PICKUP_PENDING') ...[
-            TextField(controller: _startPinCtrl, maxLength: 4, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Enter Passenger 4-Digit Start PIN')),
-            CheckboxListTile(value: _paxHelmet, onChanged: (v) => setState(() => _paxHelmet = v ?? false), title: const Text('Passenger wearing helmet')),
-            ElevatedButton(
-              onPressed: () async {
-                final token = ref.read(authControllerProvider).riderRoleToken;
-                await ref.read(apiClientProvider).post('/rider/panel/multi-service/${widget.batchId}/passenger-pickup',
-                    roleToken: token, body: {'startPin': _startPinCtrl.text.trim(), 'passengerHasHelmet': _paxHelmet});
-                _load();
-              },
-              child: const Text('Start Ride Leg 1 ->'),
+          const SizedBox(height: 18),
+          ElevatedButton(
+            onPressed: () => Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => PassengerDropoffScreen(batch: batch)),
             ),
-          ] else if (status == 'PASSENGER_ONBOARD') ...[
-            CheckboxListTile(value: _helmetReturned, onChanged: (v) => setState(() => _helmetReturned = v ?? false), title: const Text('Helmet returned & sanitized')),
-            CheckboxListTile(value: _curbOk, onChanged: (v) => setState(() => _curbOk = v ?? false), title: const Text('Dismounted safely on curb')),
-            ElevatedButton(
-              onPressed: () async {
-                final token = ref.read(authControllerProvider).riderRoleToken;
-                await ref.read(apiClientProvider).post('/rider/panel/multi-service/${widget.batchId}/passenger-dropoff',
-                    roleToken: token, body: {'helmetReturnedOk': _helmetReturned, 'curbDismountOk': _curbOk});
-                _load();
-              },
-              child: const Text('Complete Passenger Dropoff -> Head to Parcel'),
+            child: const Text('Arrived at Stop 1 (Drop Passenger) ->'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dedicated Screen: Passenger Dropoff & Fare Collection
+class PassengerDropoffScreen extends ConsumerStatefulWidget {
+  final Map<String, dynamic> batch;
+  const PassengerDropoffScreen({super.key, required this.batch});
+
+  @override
+  ConsumerState<PassengerDropoffScreen> createState() => _PassengerDropoffScreenState();
+}
+
+class _PassengerDropoffScreenState extends ConsumerState<PassengerDropoffScreen> {
+  bool _cashOk = true;
+  bool _helmetRet = true;
+  bool _curbOk = true;
+  bool _saving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = widget.batch;
+    final ride = b['rideTrip'] as Map;
+    final parcel = b['parcelShipment'] as Map;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Passenger Dropoff & Fare')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: TwoBeeColors.obsidian,
+            child: ListTile(
+              title: const Text('RIDE FARE TO COLLECT', style: TextStyle(color: TwoBeeColors.primarySoft, fontSize: 12, fontWeight: FontWeight.w700)),
+              subtitle: Text('Payment Method: ${ride['paymentMethod']}', style: const TextStyle(color: Colors.white70)),
+              trailing: Text(bdt(ride['totalFareBdt'] as num), style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
             ),
-          ] else if (status == 'PASSENGER_DROPPED') ...[
-            TextField(controller: _deliveryPinCtrl, maxLength: 4, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Enter Customer 4-Digit Delivery PIN')),
-            ElevatedButton(
-              onPressed: () async {
-                final token = ref.read(authControllerProvider).riderRoleToken;
-                await ref.read(apiClientProvider).post('/rider/panel/parcel/${parcel['id']}/deliver',
-                    roleToken: token, body: {'deliveryPin': _deliveryPinCtrl.text.trim(), 'codCollectedConfirm': true});
-                if (context.mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => BatchCompletionSummaryScreen(batch: b)),
-                  );
-                }
-              },
-              child: const Text('Complete Stop 2 Parcel Delivery & Finish Batch'),
+          ),
+          const SizedBox(height: 12),
+          CheckboxListTile(value: _cashOk, onChanged: (v) => setState(() => _cashOk = v ?? false), title: const Text('Passenger Ride Fare Settled')),
+          CheckboxListTile(value: _helmetRet, onChanged: (v) => setState(() => _helmetRet = v ?? false), title: const Text('Safety 1/2 · Helmet returned & sanitized')),
+          CheckboxListTile(value: _curbOk, onChanged: (v) => setState(() => _curbOk = v ?? false), title: const Text('Safety 2/2 · Passenger dismounted safely on curb')),
+          const SizedBox(height: 10),
+          Card(
+            color: TwoBeeColors.surfaceTonal,
+            child: ListTile(
+              title: Text('Next Leg · Parcel ${parcel['trackingCode']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text('Dropoff: ${parcel['dropoffAddress']} · Parcel Leg Payout ${bdt(parcel['riderPayoutBdt'] as num)}'),
             ),
-          ],
+          ),
+          const SizedBox(height: 18),
+          ElevatedButton(
+            onPressed: _saving
+                ? null
+                : () async {
+                    setState(() => _saving = true);
+                    final token = ref.read(authControllerProvider).riderRoleToken;
+                    await ref.read(apiClientProvider).post(
+                      '/rider/panel/multi-service/${b['id']}/passenger-dropoff',
+                      roleToken: token,
+                      body: {'helmetReturnedOk': _helmetRet, 'curbDismountOk': _curbOk},
+                    );
+                    if (context.mounted) {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (_) => FinalParcelDeliveryScreen(batch: b)),
+                      );
+                    }
+                  },
+            child: const Text('Complete Dropoff & Head to Parcel ->'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dedicated Screen: Final Parcel Delivery (Multi-Service Stop 2)
+class FinalParcelDeliveryScreen extends ConsumerStatefulWidget {
+  final Map<String, dynamic> batch;
+  const FinalParcelDeliveryScreen({super.key, required this.batch});
+
+  @override
+  ConsumerState<FinalParcelDeliveryScreen> createState() => _FinalParcelDeliveryScreenState();
+}
+
+class _FinalParcelDeliveryScreenState extends ConsumerState<FinalParcelDeliveryScreen> {
+  final _pinCtrl = TextEditingController();
+  bool _codCollected = true;
+  bool _podPhoto = true;
+  bool _saving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = widget.batch;
+    final parcel = b['parcelShipment'] as Map;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Final Parcel Delivery (Stop 2)')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: TwoBeeColors.surfaceTonal,
+            child: ListTile(
+              title: Text('Recipient: ${parcel['recipientName']}', style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('${parcel['dropoffAddress']}\nCOD Collect: ${bdt(parcel['codCollectBdt'] ?? 0)} · PIN: ${parcel['deliveryPin']}'),
+              isThreeLine: true,
+            ),
+          ),
+          const SizedBox(height: 12),
+          CheckboxListTile(value: _codCollected, onChanged: (v) => setState(() => _codCollected = v ?? false), title: Text('COD Cash (${bdt(parcel['codCollectBdt'] ?? 0)}) Collected')),
+          CheckboxListTile(value: _podPhoto, onChanged: (v) => setState(() => _podPhoto = v ?? false), title: const Text('Geo-tagged Proof of Delivery (POD) Photo Captured')),
+          const SizedBox(height: 8),
+          TextField(controller: _pinCtrl, maxLength: 4, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Customer 4-Digit Delivery OTP')),
+          const SizedBox(height: 18),
+          ElevatedButton(
+            onPressed: _saving
+                ? null
+                : () async {
+                    setState(() => _saving = true);
+                    try {
+                      final token = ref.read(authControllerProvider).riderRoleToken;
+                      await ref.read(apiClientProvider).post(
+                        '/rider/panel/parcel/${parcel['id']}/deliver',
+                        roleToken: token,
+                        body: {'deliveryPin': _pinCtrl.text.trim(), 'codCollectedConfirm': _codCollected},
+                      );
+                      if (context.mounted) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => BatchCompletionSummaryScreen(batch: b)),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _saving = false);
+                    }
+                  },
+            child: const Text('Complete Delivery & Finish Batch ->'),
+          ),
         ],
       ),
     );
@@ -1039,7 +1529,18 @@ class _RiderJobsTabState extends ConsumerState<_RiderJobsTab> {
                               title: Text('Parcel & Ride (${b['batchCode']})', style: const TextStyle(fontWeight: FontWeight.w800)),
                               subtitle: Text('${b['originZoneId']} → ${b['destinationZoneId']} · ${b['status']}'),
                               trailing: Text(bdt(b['totalPayoutBdt'] as num), style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MultiServiceBatchScreen(batchId: b['id'] as String))),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => _showLive
+                                      ? MultiServiceBatchScreen(batchId: b['id'] as String)
+                                      : RiderServiceDetailScreen(
+                                          serviceType: 'MULTI',
+                                          title: 'Multi-Service Batch ${b['batchCode']}',
+                                          data: Map<String, dynamic>.from(b as Map),
+                                        ),
+                                ),
+                              ),
                             ),
                           )),
                       ...parcels.map((p) => Card(
@@ -1048,7 +1549,18 @@ class _RiderJobsTabState extends ConsumerState<_RiderJobsTab> {
                               title: Text('Parcel ${p['trackingCode']}', style: const TextStyle(fontWeight: FontWeight.w700)),
                               subtitle: Text('${p['pickupAddress']} → ${p['dropoffAddress']} · ${p['status']}'),
                               trailing: Text(bdt(p['riderPayoutBdt'] as num)),
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParcelPickupScreen(parcelId: p['id'] as String))),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => _showLive
+                                      ? ParcelPickupScreen(parcelId: p['id'] as String)
+                                      : RiderServiceDetailScreen(
+                                          serviceType: 'PARCEL',
+                                          title: 'Parcel ${p['trackingCode']}',
+                                          data: Map<String, dynamic>.from(p as Map),
+                                        ),
+                                ),
+                              ),
                             ),
                           )),
                       ...food.map((f) => Card(
@@ -1057,7 +1569,18 @@ class _RiderJobsTabState extends ConsumerState<_RiderJobsTab> {
                               title: Text('Food ${f['orderCode']}', style: const TextStyle(fontWeight: FontWeight.w700)),
                               subtitle: Text('${f['merchant']?['businessName'] ?? ''} · ${f['status']}'),
                               trailing: Text(bdt(f['riderPayoutBdt'] as num)),
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RiderFoodExecutionScreen(orderId: f['id'] as String))),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => _showLive
+                                      ? RiderFoodExecutionScreen(orderId: f['id'] as String)
+                                      : RiderServiceDetailScreen(
+                                          serviceType: 'FOOD',
+                                          title: 'Food ${f['orderCode']}',
+                                          data: Map<String, dynamic>.from(f as Map),
+                                        ),
+                                ),
+                              ),
                             ),
                           )),
                       ...rides.map((r) => Card(
@@ -1066,13 +1589,89 @@ class _RiderJobsTabState extends ConsumerState<_RiderJobsTab> {
                               title: Text('Ride ${r['tripCode']}', style: const TextStyle(fontWeight: FontWeight.w700)),
                               subtitle: Text('${r['pickupAddress']} → ${r['dropoffAddress']} · ${r['status']}'),
                               trailing: Text(bdt(r['riderPayoutBdt'] as num)),
-                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RiderRideExecutionScreen(tripId: r['id'] as String))),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => _showLive
+                                      ? RiderRideExecutionScreen(tripId: r['id'] as String)
+                                      : RiderServiceDetailScreen(
+                                          serviceType: 'RIDE',
+                                          title: 'Ride ${r['tripCode']}',
+                                          data: Map<String, dynamic>.from(r as Map),
+                                        ),
+                                ),
+                              ),
                             ),
                           )),
                       if (batches.isEmpty && parcels.isEmpty && food.isEmpty && rides.isEmpty)
                         const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No jobs matching filter in this tab.'))),
                     ],
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dedicated Screen: Rider Service Detail (Multi-Service Legs visible ONLY to Rider!)
+class RiderServiceDetailScreen extends StatelessWidget {
+  final String serviceType;
+  final String title;
+  final Map<String, dynamic> data;
+  const RiderServiceDetailScreen({super.key, required this.serviceType, required this.title, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final ride = data['rideTrip'] as Map?;
+    final parcel = data['parcelShipment'] as Map?;
+    final payout = data['totalPayoutBdt'] ?? data['riderPayoutBdt'] ?? 0;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(color: TwoBeeColors.obsidian, borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$serviceType JOB DETAIL', style: const TextStyle(color: TwoBeeColors.primarySoft, fontSize: 12, fontWeight: FontWeight.w700)),
+                Text(bdt(payout as num), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900)),
+                Text('Status: ${data['status']}', style: const TextStyle(color: Colors.white70)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (serviceType == 'MULTI' && ride != null && parcel != null) ...[
+            Card(
+              color: TwoBeeColors.surfaceTonal,
+              child: ListTile(
+                title: Text('Stop 1 · Passenger Ride (${ride['tripCode']})', style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text('${ride['pickupAddress']} -> ${ride['dropoffAddress']} · ${bdt(ride['riderPayoutBdt'] as num)}'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                title: Text('Stop 2 · Front-Rack Parcel (${parcel['trackingCode']})', style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text('${parcel['pickupAddress']} -> ${parcel['dropoffAddress']} · ${bdt(parcel['riderPayoutBdt'] as num)}'),
+              ),
+            ),
+          ] else
+            Card(
+              child: ListTile(
+                title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text('${data['pickupAddress'] ?? data['merchant']?['businessName'] ?? ''} -> ${data['dropoffAddress'] ?? data['deliveryAddress'] ?? ''}'),
+              ),
+            ),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportLegalScreen(title: 'Report Route Issue'))),
+            icon: const Icon(Icons.report_problem_outlined),
+            label: const Text('Report Route / Payout Issue'),
           ),
         ],
       ),
@@ -1249,6 +1848,20 @@ class _RiderProfileTab extends ConsumerWidget {
                   title: const Text('Switch Role'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.go('/roles'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.help_outline_rounded, color: TwoBeeColors.primary),
+                  title: const Text('Help, Support & Terms'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportLegalScreen(title: 'Rider Support & Policy'))),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.account_tree_outlined, color: TwoBeeColors.primary),
+                  title: const Text('Preview All 2Bee Screens & Step Flows'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => context.push('/screens'),
                 ),
               ],
             ),

@@ -359,12 +359,21 @@ class _ClientActivityTabState extends ConsumerState<_ClientActivityTab> {
   void _openItem(Map item) {
     final svc = item['serviceType'] as String;
     final id = item['id'] as String;
+    final status = item['status']?.toString() ?? '';
     if (svc == 'FOOD') {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => FoodLiveTrackingScreen(orderId: id)));
+      if (['DELIVERED', 'CANCELLED', 'REJECTED'].contains(status)) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => ClientOrderDetailScreen(orderId: id)));
+      } else {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => FoodLiveTrackingScreen(orderId: id)));
+      }
     } else if (svc == 'PARCEL') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => ParcelTrackingScreen(parcelId: id)));
     } else {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => RideActiveTripScreen(tripId: id)));
+      if (status == 'MATCHING') {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => RideMatchingRadarScreen(tripId: id)));
+      } else {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => RideActiveTripScreen(tripId: id)));
+      }
     }
   }
 
@@ -648,6 +657,14 @@ class _ClientProfileTab extends ConsumerWidget {
                   subtitle: const Text('Same verified phone, role passcode protected'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.go('/roles'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.account_tree_outlined, color: TwoBeeColors.primary),
+                  title: const Text('Preview All 2Bee Screens & Step Flows'),
+                  subtitle: const Text('Jump to any step across Client, Rider & Merchant'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => context.push('/screens'),
                 ),
               ],
             ),

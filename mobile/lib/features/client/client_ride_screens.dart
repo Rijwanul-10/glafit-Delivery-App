@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/api_client.dart';
@@ -262,7 +263,7 @@ class _RideTierScreenState extends ConsumerState<RideTierScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => RideActiveTripScreen(tripId: res['trip']['id'] as String)),
+        MaterialPageRoute(builder: (_) => RideMatchingRadarScreen(tripId: res['trip']['id'] as String)),
       );
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -327,7 +328,127 @@ class _RideTierScreenState extends ConsumerState<RideTierScreen> {
   }
 }
 
-/// Ride 3 & 4 & 5: Matching Radar -> Active Trip (Isolated from Multi-Service!) -> Rating
+/// Ride 3: Courier & Rider Matching Radar
+class RideMatchingRadarScreen extends ConsumerStatefulWidget {
+  final String tripId;
+  const RideMatchingRadarScreen({super.key, required this.tripId});
+
+  @override
+  ConsumerState<RideMatchingRadarScreen> createState() => _RideMatchingRadarScreenState();
+}
+
+class _RideMatchingRadarScreenState extends ConsumerState<RideMatchingRadarScreen> {
+  Map<String, dynamic>? _trip;
+  int _secondsLeft = 60;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    final sock = ref.read(socketServiceProvider);
+    sock.joinTracking('ride', widget.tripId);
+    sock.socket?.off('ride:status');
+    sock.socket?.on('ride:status', (_) => _load());
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _secondsLeft = _secondsLeft > 0 ? _secondsLeft - 1 : 0);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final res = await ref.read(apiClientProvider).get('/rides/${widget.tripId}');
+    final t = Map<String, dynamic>.from(res['trip'] as Map);
+    if (!mounted) return;
+    if (t['status'] != 'MATCHING') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => RideActiveTripScreen(tripId: widget.tripId)),
+      );
+      return;
+    }
+    setState(() => _trip = t);
+  }
+
+  Future<void> _simulateMatch() async {
+    await ref.read(apiClientProvider).post('/common/demo/advance-ride/${widget.tripId}');
+    await _load();
+  }
+
+  Future<void> _cancel() async {
+    await ref.read(apiClientProvider).post('/rides/${widget.tripId}/cancel');
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _trip;
+    return Scaffold(
+      appBar: AppBar(title: const Text('3. Rider Matching Radar')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            if (t != null)
+              TwoBeeMapPreview(
+                pickupLat: (t['pickupLat'] as num).toDouble(),
+                pickupLng: (t['pickupLng'] as num).toDouble(),
+                dropoffLat: (t['dropoffLat'] as num).toDouble(),
+                dropoffLng: (t['dropoffLng'] as num).toDouble(),
+                height: 190,
+              ),
+            const Spacer(),
+            Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: TwoBeeColors.surfaceTonal,
+                border: Border.all(color: TwoBeeColors.primary, width: 3),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.radar_rounded, color: TwoBeeColors.primary, size: 46),
+                  const SizedBox(height: 4),
+                  Text('${_secondsLeft}s', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: TwoBeeColors.primary)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text('Searching Nearest 2Bee EV Riders...', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 6),
+            Text(
+              t != null ? '${t['pickupAddress']} -> ${t['dropoffAddress']} · ${bdt(t['totalFareBdt'] as num)}' : 'Dispatching to Banani/Gulshan hub...',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: TwoBeeColors.textSecondary),
+            ),
+            const Spacer(),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: TwoBeeColors.obsidian),
+              onPressed: _simulateMatch,
+              icon: const Icon(Icons.fast_forward_rounded),
+              label: const Text('Preview: Simulate Rider Accepts ->'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: _cancel,
+              child: Text('Cancel Request (${_secondsLeft}s)'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Ride 4: Active Trip & Driver En-Route (Isolated from Multi-Service!)
 class RideActiveTripScreen extends ConsumerStatefulWidget {
   final String tripId;
   const RideActiveTripScreen({super.key, required this.tripId});
@@ -379,50 +500,18 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
     await _load();
   }
 
-  Future<void> _rateDialog() async {
-    int stars = 5;
-    num tip = 20;
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setM) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Trip Complete! Rate Your Ride', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  5,
-                  (i) => IconButton(
-                    onPressed: () => setM(() => stars = i + 1),
-                    icon: Icon(i < stars ? Icons.star_rounded : Icons.star_border_rounded, color: Colors.amber, size: 34),
-                  ),
-                ),
-              ),
-              Wrap(
-                spacing: 8,
-                children: [0, 20, 50, 100]
-                    .map((t) => ChoiceChip(label: Text(t == 0 ? 'No tip' : bdt(t)), selected: tip == t, onSelected: (_) => setM(() => tip = t)))
-                    .toList(),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () async {
-                  await ref.read(apiClientProvider).post('/rides/${widget.tripId}/rate', body: {'rating': stars, 'tipBdt': tip});
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  _load();
-                },
-                child: const Text('Submit Rating & Done'),
-              ),
-            ],
-          ),
-        ),
-      ),
+  Future<void> _advanceDemo() async {
+    await ref.read(apiClientProvider).post('/common/demo/advance-ride/${widget.tripId}');
+    await _load();
+  }
+
+  Future<void> _openCompletion() async {
+    if (_trip == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => RideCompletionRatingScreen(trip: _trip!)),
     );
+    _load();
   }
 
   @override
@@ -431,6 +520,13 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
     final t = _trip!;
     final driver = t['driver'] as Map?;
     final status = t['status'] as String;
+    final phaseText = status == 'RIDER_ASSIGNED'
+        ? 'Driver En-Route to Pickup'
+        : status == 'ARRIVED_PICKUP'
+            ? 'Driver Arrived · Share Start PIN'
+            : status == 'ON_TRIP'
+                ? 'Trip In Progress -> Destination'
+                : status;
 
     return Scaffold(
       appBar: AppBar(
@@ -465,12 +561,15 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('STATUS: $status', style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
-                        Text('${t['pickupAddress']} → ${t['dropoffAddress']}', style: const TextStyle(fontSize: 13)),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(phaseText, style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+                          const SizedBox(height: 4),
+                          Text('${t['pickupAddress']} → ${t['dropoffAddress']}', style: const TextStyle(fontSize: 13)),
+                        ],
+                      ),
                     ),
                     Column(
                       children: [
@@ -519,6 +618,14 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
                   ),
                 ),
               ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Live trip link copied: https://2bee.app/ride/${t['tripCode']}')),
+              ),
+              icon: const Icon(Icons.share_location_rounded),
+              label: const Text('Share Live Trip Link'),
+            ),
             const SizedBox(height: 12),
             Card(
               child: Padding(
@@ -526,35 +633,7 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Fare Breakdown', style: TextStyle(fontWeight: FontWeight.w700)),
-                        TextButton.icon(
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: Text('Ride Invoice · ${t['tripCode']}'),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Pickup: ${t['pickupAddress']}'),
-                                  Text('Dropoff: ${t['dropoffAddress']}'),
-                                  Text('Tier: ${t['fleetTier']}'),
-                                  const Divider(),
-                                  Text('Total Fare: ${bdt(t['totalFareBdt'] as num)}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                                  Text('Payment: ${t['paymentMethod']} (${t['paymentStatus']})'),
-                                ],
-                              ),
-                              actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
-                            ),
-                          ),
-                          icon: const Icon(Icons.receipt_outlined, size: 16),
-                          label: const Text('Invoice'),
-                        ),
-                      ],
-                    ),
+                    const Text('Fare Breakdown', style: TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Base + Distance'), Text(bdt(t['totalFareBdt'] as num))]),
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Payment'), Text('${t['paymentMethod']} (${t['paymentStatus']})')]),
@@ -562,12 +641,150 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
                 ),
               ),
             ),
-            if (status == 'COMPLETED' && t['rating'] == null) ...[
+            if (status != 'COMPLETED' && status != 'CANCELLED') ...[
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: TwoBeeColors.obsidian),
+                onPressed: _advanceDemo,
+                icon: const Icon(Icons.fast_forward_rounded),
+                label: const Text('Preview: Simulate Next Trip Phase ->'),
+              ),
+            ],
+            if (status == 'COMPLETED') ...[
               const SizedBox(height: 14),
-              ElevatedButton(onPressed: _rateDialog, child: const Text('Rate & Tip Driver')),
+              ElevatedButton(onPressed: _openCompletion, child: const Text('Trip Summary, Invoice & Rating ->')),
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Ride 5: Trip Completion & Fare Rating
+class RideCompletionRatingScreen extends ConsumerStatefulWidget {
+  final Map<String, dynamic> trip;
+  const RideCompletionRatingScreen({super.key, required this.trip});
+
+  @override
+  ConsumerState<RideCompletionRatingScreen> createState() => _RideCompletionRatingScreenState();
+}
+
+class _RideCompletionRatingScreenState extends ConsumerState<RideCompletionRatingScreen> {
+  int _stars = 5;
+  num _tip = 20;
+  final _tags = <String>{'Safe Ride', 'Clean Helmet'};
+  bool _saving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.trip;
+    final alreadyRated = t['rating'] != null;
+    final distKm = (t['distanceKm'] as num?) ?? 5.4;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('5. Trip Completion & Rating')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(color: TwoBeeColors.obsidian, borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              children: [
+                const Text('ZERO-EMISSION TRIP COMPLETE', style: TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w700, fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(bdt(t['totalFareBdt'] as num), style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 6),
+                Text('${distKm.toStringAsFixed(1)} km · +25 2Bee EcoPoints earned', style: const TextStyle(color: Colors.white70)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Invoice · ${t['tripCode']}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                      TextButton.icon(
+                        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('PDF Invoice ready for ${t['tripCode']}')),
+                        ),
+                        icon: const Icon(Icons.download_rounded, size: 16),
+                        label: const Text('Download Invoice'),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  Text('From: ${t['pickupAddress']}'),
+                  Text('To: ${t['dropoffAddress']}'),
+                  Text('Fleet Tier: ${t['fleetTier']} · ${t['paymentMethod']}'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (!alreadyRated) ...[
+            const Text('Rate Your 2Bee Rider', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                5,
+                (i) => IconButton(
+                  onPressed: () => setState(() => _stars = i + 1),
+                  icon: Icon(i < _stars ? Icons.star_rounded : Icons.star_border_rounded, color: Colors.amber, size: 34),
+                ),
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: ['Safe Ride', 'Clean Helmet', 'On Time', 'Polite'].map((tag) {
+                return FilterChip(
+                  label: Text(tag),
+                  selected: _tags.contains(tag),
+                  onSelected: (v) => setState(() => v ? _tags.add(tag) : _tags.remove(tag)),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+            const Text('Optional Driver Tip', style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              children: [0, 20, 50, 100]
+                  .map((amt) => ChoiceChip(label: Text(amt == 0 ? 'No tip' : bdt(amt)), selected: _tip == amt, onSelected: (_) => setState(() => _tip = amt)))
+                  .toList(),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton(
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      setState(() => _saving = true);
+                      await ref.read(apiClientProvider).post('/rides/${t['id']}/rate', body: {
+                        'rating': _stars,
+                        'tipBdt': _tip,
+                        'comment': _tags.join(', '),
+                      });
+                      if (context.mounted) Navigator.popUntil(context, (r) => r.isFirst);
+                    },
+              child: Text(_saving ? 'Submitting...' : 'Submit Rating & Done'),
+            ),
+          ] else
+            Card(
+              color: TwoBeeColors.surfaceTonal,
+              child: ListTile(
+                leading: const Icon(Icons.star_rounded, color: Colors.amber),
+                title: Text('Rated ${t['rating']}/5 Stars · Tip ${bdt(t['tipBdt'] ?? 0)}'),
+              ),
+            ),
+        ],
       ),
     );
   }

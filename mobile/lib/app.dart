@@ -5,6 +5,7 @@ import 'core/network/api_client.dart';
 import 'core/theme/twobee_theme.dart';
 import 'features/auth/auth_screens.dart';
 import 'features/client/client_shell.dart';
+import 'features/common/screen_catalog.dart';
 import 'features/merchant/merchant_auth_kyc.dart';
 import 'features/merchant/merchant_shell_panels.dart';
 import 'features/rider/rider_auth_kyc.dart';
@@ -40,6 +41,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(path: '/roles', builder: (_, _) => const RoleSelectionScreen()),
+      GoRoute(path: '/screens', builder: (_, _) => const AllScreensExplorerScreen()),
 
       // Client 4-tab Shell (Home | Activity | Wallet | Profile)
       GoRoute(path: '/client', builder: (_, _) => const ClientShell()),

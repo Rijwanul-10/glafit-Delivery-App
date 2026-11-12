@@ -92,8 +92,17 @@ class _MerchantRegWizardScreenState extends ConsumerState<MerchantRegWizardScree
   final _payoutHolderCtrl = TextEditingController();
   String _payoutProvider = 'BKASH';
   int _quota = 15;
+  int _prepMins = 25;
   String _cutoff = '20:00';
+  String _openHours = '11:00 AM – 11:00 PM';
   bool _hygieneOk = true;
+  bool _hygienePack = true;
+  bool _hygieneFresh = true;
+  bool _nidFront = true;
+  bool _nidBack = true;
+  bool _selfieOk = true;
+  bool _tradeDoc = true;
+  bool _photosReady = true;
   bool _termsOk = true;
   bool _loading = false;
   String? _error;
@@ -138,7 +147,19 @@ class _MerchantRegWizardScreenState extends ConsumerState<MerchantRegWizardScree
         ],
       });
       await ref.read(authControllerProvider.notifier).refreshRoles();
-      if (mounted) context.go('/merchant/pending');
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MerchantVerificationPendingScreen(
+              businessName: _nameCtrl.text.trim().isEmpty
+                  ? (isPhysical ? 'Spice Hub Dhaka' : 'Home Taste Kitchen')
+                  : _nameCtrl.text.trim(),
+              merchantType: widget.merchantType,
+            ),
+          ),
+        );
+      }
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -179,15 +200,39 @@ class _MerchantRegWizardScreenState extends ConsumerState<MerchantRegWizardScree
                     TextField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: 'Contact Phone')),
                   ] else if (_step == 1) ...[
                     TextField(controller: _nidCtrl, decoration: const InputDecoration(labelText: 'Owner NID (10/17 digits)')),
+                    const SizedBox(height: 10),
+                    CheckboxListTile(
+                      value: _nidFront,
+                      onChanged: (v) => setState(() => _nidFront = v ?? true),
+                      title: const Text('NID Front Photo Uploaded'),
+                      secondary: const Icon(Icons.badge_outlined, color: TwoBeeColors.primary),
+                    ),
+                    CheckboxListTile(
+                      value: _nidBack,
+                      onChanged: (v) => setState(() => _nidBack = v ?? true),
+                      title: const Text('NID Back Photo Uploaded'),
+                      secondary: const Icon(Icons.badge_outlined, color: TwoBeeColors.primary),
+                    ),
+                    CheckboxListTile(
+                      value: _selfieOk,
+                      onChanged: (v) => setState(() => _selfieOk = v ?? true),
+                      title: const Text('Live Owner Selfie Captured'),
+                      secondary: const Icon(Icons.face_retouching_natural_outlined, color: TwoBeeColors.primary),
+                    ),
                     if (isPhysical) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       TextField(controller: _etinCtrl, decoration: const InputDecoration(labelText: '12-digit e-TIN')),
                       const SizedBox(height: 10),
                       TextField(controller: _tradeCtrl, decoration: const InputDecoration(labelText: 'Trade License Number')),
+                      CheckboxListTile(
+                        value: _tradeDoc,
+                        onChanged: (v) => setState(() => _tradeDoc = v ?? true),
+                        title: const Text('Trade License PDF / Photo Attached'),
+                      ),
                     ] else
                       const Padding(
                         padding: EdgeInsets.only(top: 10),
-                        child: Text('e-TIN is optional for Home Kitchens.', style: TextStyle(color: TwoBeeColors.textSecondary)),
+                        child: Text('e-TIN & Trade License are optional for Home Kitchens.', style: TextStyle(color: TwoBeeColors.textSecondary)),
                       ),
                   ] else if (_step == 2) ...[
                     TextField(controller: _fbCtrl, decoration: const InputDecoration(labelText: 'Public Facebook Page URL')),
@@ -200,6 +245,27 @@ class _MerchantRegWizardScreenState extends ConsumerState<MerchantRegWizardScree
                       ),
                     ),
                   ] else if (_step == 3) ...[
+                    CheckboxListTile(
+                      value: _photosReady,
+                      onChanged: (v) => setState(() => _photosReady = v ?? true),
+                      title: Text(isPhysical
+                          ? 'Storefront, Kitchen & 3 Dish Photos Uploaded'
+                          : 'Clean Home Kitchen & 3 Signature Dish Photos Uploaded'),
+                      secondary: const Icon(Icons.photo_library_outlined, color: TwoBeeColors.primary),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Default Avg Prep Time', style: TextStyle(fontWeight: FontWeight.w700)),
+                        Row(
+                          children: [
+                            IconButton(onPressed: () => setState(() => _prepMins = (_prepMins - 5).clamp(10, 90)), icon: const Icon(Icons.remove_circle_outline)),
+                            Text('$_prepMins mins', style: const TextStyle(fontWeight: FontWeight.w800)),
+                            IconButton(onPressed: () => setState(() => _prepMins = (_prepMins + 5).clamp(10, 90)), icon: const Icon(Icons.add_circle_outline)),
+                          ],
+                        ),
+                      ],
+                    ),
                     if (!isPhysical) ...[
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -224,20 +290,37 @@ class _MerchantRegWizardScreenState extends ConsumerState<MerchantRegWizardScree
                         ],
                         onChanged: (v) => setState(() => _cutoff = v ?? '20:00'),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       CheckboxListTile(
                         value: _hygieneOk,
                         onChanged: (v) => setState(() => _hygieneOk = v ?? false),
-                        title: const Text('I accept 2Bee Home Kitchen Hygiene & Fresh-Batch Standards'),
+                        title: const Text('2Bee Hygiene Verified Kitchen Surfaces & Utensils'),
                       ),
-                    ] else
-                      const Card(
+                      CheckboxListTile(
+                        value: _hygienePack,
+                        onChanged: (v) => setState(() => _hygienePack = v ?? false),
+                        title: const Text('Tamper-sealed Food-Grade Packaging Used'),
+                      ),
+                      CheckboxListTile(
+                        value: _hygieneFresh,
+                        onChanged: (v) => setState(() => _hygieneFresh = v ?? false),
+                        title: const Text('Freshly Cooked Per Daily Batch (Zero Reheating)'),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 8),
+                      Card(
                         child: ListTile(
-                          leading: Icon(Icons.camera_alt_outlined, color: TwoBeeColors.primary),
-                          title: Text('Storefront, Kitchen & Dish Photos Ready'),
-                          subtitle: Text('Default hours: Mon–Sun 11:00 AM – 11:00 PM'),
+                          title: const Text('Operating Hours (Mon – Sun)'),
+                          subtitle: Text(_openHours),
+                          trailing: TextButton(
+                            onPressed: () {
+                              setState(() => _openHours = 'Mon–Sun: 11:00 AM – 11:30 PM (Copied to all days)');
+                            },
+                            child: const Text('Copy Mon to All'),
+                          ),
                         ),
                       ),
+                    ],
                   ] else if (_step == 4) ...[
                     DropdownButtonFormField<String>(
                       initialValue: _payoutProvider,
@@ -255,21 +338,36 @@ class _MerchantRegWizardScreenState extends ConsumerState<MerchantRegWizardScree
                     TextField(controller: _payoutHolderCtrl, decoration: const InputDecoration(labelText: 'Account Holder Name (Match NID)')),
                   ] else ...[
                     Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Store Type: ${widget.merchantType}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                            Text('Name: ${_nameCtrl.text.isEmpty ? "Ready" : _nameCtrl.text}'),
-                            Text('NID: ${_nidCtrl.text}'),
-                            if (!isPhysical) Text('Home Kitchen Cap: $_quota orders/day · Cutoff $_cutoff'),
-                            const SizedBox(height: 8),
-                            const Text('Security Note: Passcode is NOT required now. After admin approves your KYC, your approval notice will ask you to set your permanent 6-digit passcode.',
-                                style: TextStyle(fontSize: 12, color: TwoBeeColors.primary)),
-                          ],
-                        ),
+                      child: Column(
+                        children: [
+                          ListTile(
+                            title: Text('${isPhysical ? "Business" : "Kitchen"}: ${_nameCtrl.text.isEmpty ? "Ready" : _nameCtrl.text}'),
+                            subtitle: Text(_addrCtrl.text),
+                            trailing: TextButton(onPressed: () => setState(() => _step = 0), child: const Text('Edit')),
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            title: Text('NID: ${_nidCtrl.text}'),
+                            subtitle: Text(isPhysical ? 'e-TIN ${_etinCtrl.text} · License ${_tradeCtrl.text}' : 'Home Kitchen Identity Verified'),
+                            trailing: TextButton(onPressed: () => setState(() => _step = 1), child: const Text('Edit')),
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            title: Text(isPhysical ? 'Hours & Prep ($_prepMins mins)' : 'Batch Quota $_quota/day · Cutoff $_cutoff'),
+                            trailing: TextButton(onPressed: () => setState(() => _step = 3), child: const Text('Edit')),
+                          ),
+                          const Divider(height: 1),
+                          ListTile(
+                            title: Text('Payout: $_payoutProvider · ${_payoutNoCtrl.text}'),
+                            trailing: TextButton(onPressed: () => setState(() => _step = 4), child: const Text('Edit')),
+                          ),
+                        ],
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    const VerificationBanner(
+                      title: 'Passcode Created ONLY After Approval',
+                      subtitle: 'No passcode needed right now. Once admin approves your KYC, you will verify via OTP and set your 6-digit PIN.',
                     ),
                     CheckboxListTile(
                       value: _termsOk,
@@ -401,7 +499,12 @@ class _MerchantApprovedPinSetupScreenState extends ConsumerState<MerchantApprove
       });
       ref.read(authControllerProvider.notifier).setMerchantToken(res['roleToken'] as String);
       await ref.read(authControllerProvider.notifier).refreshRoles();
-      if (mounted) context.go('/merchant/panel');
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const MerchantFingerprintSetupScreen()),
+        );
+      }
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -530,8 +633,131 @@ class _RestaurantLoginScreenState extends ConsumerState<RestaurantLoginScreen> {
                 onPressed: () => context.push('/merchant/forgot-passcode'),
                 child: const Text('Forgot passcode? (Reset via OTP + NID)'),
               ),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MerchantFingerprintSetupScreen()),
+                ),
+                child: const Text('Setup Fingerprint Unlock'),
+              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class MerchantVerificationPendingScreen extends StatelessWidget {
+  final String businessName;
+  final String merchantType;
+  const MerchantVerificationPendingScreen({
+    super.key,
+    required this.businessName,
+    required this.merchantType,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Verification Pending')),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const CircleAvatar(
+              radius: 38,
+              backgroundColor: TwoBeeColors.surfaceTonal,
+              child: Icon(Icons.hourglass_top_rounded, size: 40, color: TwoBeeColors.primary),
+            ),
+            const SizedBox(height: 16),
+            Text('$businessName Submitted!', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
+            const SizedBox(height: 6),
+            Text('Store Type: $merchantType · Estimated review time: 24–48 hours',
+                style: const TextStyle(color: TwoBeeColors.textSecondary), textAlign: TextAlign.center),
+            const SizedBox(height: 18),
+            const Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.check_circle, color: TwoBeeColors.primary),
+                    title: Text('1. Application Received'),
+                  ),
+                  Divider(height: 1),
+                  ListTile(
+                    leading: Icon(Icons.schedule, color: TwoBeeColors.primary),
+                    title: Text('2. Identity & Facebook Token Verification'),
+                  ),
+                  Divider(height: 1),
+                  ListTile(
+                    leading: Icon(Icons.lock_clock_outlined, color: TwoBeeColors.textSecondary),
+                    title: Text('3. Approval SMS Notice -> Create 6-Digit PIN'),
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: () => context.go('/merchant/pending'),
+              child: const Text('Open Locked Pending Home ->'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MerchantFingerprintSetupScreen extends StatefulWidget {
+  const MerchantFingerprintSetupScreen({super.key});
+
+  @override
+  State<MerchantFingerprintSetupScreen> createState() => _MerchantFingerprintSetupScreenState();
+}
+
+class _MerchantFingerprintSetupScreenState extends State<MerchantFingerprintSetupScreen> {
+  bool _enabled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Fingerprint & Biometric Setup')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 52,
+              backgroundColor: _enabled ? TwoBeeColors.primary : TwoBeeColors.surfaceTonal,
+              child: Icon(Icons.fingerprint_rounded, size: 64, color: _enabled ? Colors.white : TwoBeeColors.primary),
+            ),
+            const SizedBox(height: 22),
+            const Text('Faster Daily Unlock for Your Kitchen', textAlign: TextAlign.center, style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            const Text(
+              'Unlock orders and store settings in 1 tap alongside your fixed 6-digit security passcode.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: TwoBeeColors.textSecondary),
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() => _enabled = true);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Biometric quick-unlock linked with your 6-digit PIN!')),
+                );
+                context.go('/merchant/panel');
+              },
+              icon: const Icon(Icons.fingerprint_rounded),
+              label: const Text('Enable Fingerprint Unlock'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: () => context.go('/merchant/panel'),
+              child: const Text('Skip for Now -> Enter Merchant Panel'),
+            ),
+          ],
         ),
       ),
     );

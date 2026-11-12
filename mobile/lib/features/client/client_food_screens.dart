@@ -467,80 +467,12 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
       return;
     }
 
-    final selected = <String, List<Map<String, dynamic>>>{};
-    int qty = 1;
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item['name'].toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 12),
-              for (final g in groups) ...[
-                Text('${g['title']} ${g['required'] == true ? '(Required)' : '(Optional)'}',
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-                for (final opt in (g['options'] as List))
-                  CheckboxListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('${opt['name']} (+${bdt(opt['extraBdt'] as num)})'),
-                    value: (selected[g['title']] ?? []).any((o) => o['id'] == opt['id']),
-                    onChanged: (v) {
-                      setS(() {
-                        final list = selected[g['title']] ?? [];
-                        if (g['required'] == true) {
-                          selected[g['title'] as String] = [Map<String, dynamic>.from(opt as Map)];
-                        } else if (v == true) {
-                          selected[g['title'] as String] = [...list, Map<String, dynamic>.from(opt as Map)];
-                        } else {
-                          selected[g['title'] as String] = list.where((o) => o['id'] != opt['id']).toList();
-                        }
-                      });
-                    },
-                  ),
-              ],
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      IconButton(onPressed: () => setS(() => qty = (qty - 1).clamp(1, 20)), icon: const Icon(Icons.remove_circle_outline)),
-                      Text('$qty', style: const TextStyle(fontWeight: FontWeight.w800)),
-                      IconButton(onPressed: () => setS(() => qty++), icon: const Icon(Icons.add_circle_outline)),
-                    ],
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      final missing = groups.any((g) => g['required'] == true && (selected[g['title']]?.isEmpty ?? true));
-                      if (missing) return;
-                      final opts = selected.entries
-                          .expand((e) => e.value.map((o) => {'group': e.key, 'name': o['name'], 'extraBdt': o['extraBdt']}))
-                          .toList();
-                      ref.read(cartProvider.notifier).addItem(
-                            merchantId: m['id'] as String,
-                            merchantName: m['businessName'] as String,
-                            deliveryFee: (m['deliveryFeeBdt'] as num).toDouble(),
-                            line: CartLine(
-                              menuItemId: item['id'] as String,
-                              name: item['name'] as String,
-                              basePrice: (item['priceBdt'] as num).toDouble(),
-                              selectedOptions: opts,
-                              quantity: qty,
-                            ),
-                          );
-                      Navigator.pop(ctx);
-                    },
-                    child: const Text('Add to cart'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ItemCustomizationScreen(
+          merchant: m,
+          item: Map<String, dynamic>.from(item),
         ),
       ),
     );
@@ -955,44 +887,17 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
   }
 
   Future<void> _rateFood() async {
-    int restStars = 5;
-    int riderStars = 5;
-    num tip = 20;
-    await showModalBottomSheet(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Delivered! Rate Restaurant & Rider', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (i) => IconButton(onPressed: () => setS(() => restStars = i + 1), icon: Icon(i < restStars ? Icons.star : Icons.star_border, color: Colors.amber))),
-              ),
-              const Text('Rider Tip'),
-              Wrap(
-                spacing: 8,
-                children: [0, 10, 20, 50].map((t) => ChoiceChip(label: Text(bdt(t)), selected: tip == t, onSelected: (_) => setS(() => tip = t))).toList(),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () async {
-                  await ref.read(apiClientProvider).post('/food/orders/${widget.orderId}/rate', body: {
-                    'restaurantRating': restStars,
-                    'riderRating': riderStars,
-                    'tipBdt': tip,
-                  });
-                  if (ctx.mounted) Navigator.pop(ctx);
-                },
-                child: const Text('Submit Review'),
-              ),
-            ],
-          ),
-        ),
-      ),
+    if (_order == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => FoodDeliveredRatingScreen(order: _order!)),
     );
+    _load();
+  }
+
+  Future<void> _advanceDemo() async {
+    await ref.read(apiClientProvider).post('/common/demo/advance-food/${widget.orderId}');
+    await _load();
   }
 
   @override
@@ -1104,12 +1009,357 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                 ),
               ],
             ),
+            if (o['status'] != 'DELIVERED' && o['status'] != 'CANCELLED' && o['status'] != 'REJECTED') ...[
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: TwoBeeColors.obsidian),
+                onPressed: _advanceDemo,
+                icon: const Icon(Icons.fast_forward_rounded),
+                label: const Text('Preview: Simulate Next Order Stage ->'),
+              ),
+            ],
             if (o['status'] == 'DELIVERED') ...[
               const SizedBox(height: 12),
-              ElevatedButton(onPressed: _rateFood, child: const Text('Rate & Tip')),
+              ElevatedButton(
+                onPressed: _rateFood,
+                child: const Text('Rate Restaurant & Rider / View Order Detail ->'),
+              ),
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class ItemCustomizationScreen extends ConsumerStatefulWidget {
+  final Map<String, dynamic> merchant;
+  final Map<String, dynamic> item;
+  const ItemCustomizationScreen({super.key, required this.merchant, required this.item});
+
+  @override
+  ConsumerState<ItemCustomizationScreen> createState() => _ItemCustomizationScreenState();
+}
+
+class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScreen> {
+  final Map<String, List<Map<String, dynamic>>> _selected = {};
+  final _noteCtrl = TextEditingController();
+  int _qty = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final groups = (item['optionGroupsJson'] as List?) ?? [];
+    double extra = 0;
+    for (final list in _selected.values) {
+      for (final o in list) {
+        extra += (o['extraBdt'] as num).toDouble();
+      }
+    }
+    final lineTotal = ((item['priceBdt'] as num).toDouble() + extra) * _qty;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(item['name'].toString())),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(color: TwoBeeColors.surfaceTonal, borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item['name'].toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(item['description']?.toString() ?? '', style: const TextStyle(color: TwoBeeColors.textSecondary)),
+                const SizedBox(height: 8),
+                Text('Base Price: ${bdt(item['priceBdt'] as num)}', style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          for (final g in groups) ...[
+            Text('${g['title']} ${g['required'] == true ? '(Required)' : '(Optional)'}',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+            const SizedBox(height: 6),
+            Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                children: [
+                  for (final opt in (g['options'] as List))
+                    CheckboxListTile(
+                      title: Text('${opt['name']} (+${bdt(opt['extraBdt'] as num)})'),
+                      value: (_selected[g['title']] ?? []).any((o) => o['id'] == opt['id']),
+                      onChanged: (v) {
+                        setState(() {
+                          final list = _selected[g['title']] ?? [];
+                          if (g['required'] == true) {
+                            _selected[g['title'] as String] = [Map<String, dynamic>.from(opt as Map)];
+                          } else if (v == true) {
+                            _selected[g['title'] as String] = [...list, Map<String, dynamic>.from(opt as Map)];
+                          } else {
+                            _selected[g['title'] as String] = list.where((o) => o['id'] != opt['id']).toList();
+                          }
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ],
+          TextField(
+            controller: _noteCtrl,
+            decoration: const InputDecoration(labelText: 'Special Kitchen Instructions (optional)'),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(onPressed: () => setState(() => _qty = (_qty - 1).clamp(1, 20)), icon: const Icon(Icons.remove_circle_outline, size: 30)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Text('$_qty', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              ),
+              IconButton(onPressed: () => setState(() => _qty++), icon: const Icon(Icons.add_circle_outline, size: 30)),
+            ],
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: ElevatedButton(
+            onPressed: () {
+              final missing = groups.any((g) => g['required'] == true && (_selected[g['title']]?.isEmpty ?? true));
+              if (missing) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select required options')));
+                return;
+              }
+              final opts = _selected.entries
+                  .expand((e) => e.value.map((o) => {'group': e.key, 'name': o['name'], 'extraBdt': o['extraBdt']}))
+                  .toList();
+              ref.read(cartProvider.notifier).addItem(
+                    merchantId: widget.merchant['id'] as String,
+                    merchantName: widget.merchant['businessName'] as String,
+                    deliveryFee: (widget.merchant['deliveryFeeBdt'] as num).toDouble(),
+                    line: CartLine(
+                      menuItemId: item['id'] as String,
+                      name: item['name'] as String,
+                      basePrice: (item['priceBdt'] as num).toDouble(),
+                      selectedOptions: opts,
+                      quantity: _qty,
+                    ),
+                  );
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const CartScreen()));
+            },
+            child: Text('Add to Cart · ${bdt(lineTotal)} ->'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class FoodDeliveredRatingScreen extends ConsumerStatefulWidget {
+  final Map<String, dynamic> order;
+  const FoodDeliveredRatingScreen({super.key, required this.order});
+
+  @override
+  ConsumerState<FoodDeliveredRatingScreen> createState() => _FoodDeliveredRatingScreenState();
+}
+
+class _FoodDeliveredRatingScreenState extends ConsumerState<FoodDeliveredRatingScreen> {
+  int _restStars = 5;
+  int _riderStars = 5;
+  num _tip = 20;
+  final _tags = <String>{'Fresh & Hot', 'Fast Courier'};
+  final _commentCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = widget.order;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Delivered & Rating')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const CircleAvatar(
+            radius: 36,
+            backgroundColor: TwoBeeColors.surfaceTonal,
+            child: Icon(Icons.restaurant_rounded, color: TwoBeeColors.primary, size: 38),
+          ),
+          const SizedBox(height: 12),
+          Text('Enjoy your meal from ${o['merchant']?['businessName'] ?? '2Bee Partner'}!',
+              textAlign: TextAlign.center, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  const Text('Rate Food & Kitchen', style: TextStyle(fontWeight: FontWeight.w800)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (i) => IconButton(onPressed: () => setState(() => _restStars = i + 1), icon: Icon(i < _restStars ? Icons.star : Icons.star_border, color: Colors.amber, size: 32))),
+                  ),
+                  const Divider(),
+                  const Text('Rate Courier Service', style: TextStyle(fontWeight: FontWeight.w800)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (i) => IconButton(onPressed: () => setState(() => _riderStars = i + 1), icon: Icon(i < _riderStars ? Icons.star : Icons.star_border, color: Colors.amber, size: 32))),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: ['Fresh & Hot', 'Great Packaging', 'Fast Courier', 'Polite Handover'].map((t) {
+              return FilterChip(
+                label: Text(t),
+                selected: _tags.contains(t),
+                onSelected: (v) => setState(() => v ? _tags.add(t) : _tags.remove(t)),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          const Text('Add Tip for Rider', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            children: [0, 10, 20, 50].map((t) => ChoiceChip(label: Text(t == 0 ? 'No Tip' : bdt(t)), selected: _tip == t, onSelected: (_) => setState(() => _tip = t))).toList(),
+          ),
+          const SizedBox(height: 12),
+          TextField(controller: _commentCtrl, decoration: const InputDecoration(labelText: 'Additional Comment (optional)')),
+          const SizedBox(height: 18),
+          ElevatedButton(
+            onPressed: _saving
+                ? null
+                : () async {
+                    setState(() => _saving = true);
+                    await ref.read(apiClientProvider).post('/food/orders/${o['id']}/rate', body: {
+                      'restaurantRating': _restStars,
+                      'riderRating': _riderStars,
+                      'tipBdt': _tip,
+                      'comment': '${_tags.join(", ")} ${_commentCtrl.text.trim()}'.trim(),
+                    });
+                    if (context.mounted) {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (_) => ClientOrderDetailScreen(orderId: o['id'] as String)),
+                      );
+                    }
+                  },
+            child: Text(_saving ? 'Submitting...' : 'Submit Review -> Order Detail'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ClientOrderDetailScreen extends ConsumerStatefulWidget {
+  final String orderId;
+  const ClientOrderDetailScreen({super.key, required this.orderId});
+
+  @override
+  ConsumerState<ClientOrderDetailScreen> createState() => _ClientOrderDetailScreenState();
+}
+
+class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScreen> {
+  Map<String, dynamic>? _order;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await ref.read(apiClientProvider).get('/food/orders/${widget.orderId}');
+      setState(() => _order = Map<String, dynamic>.from(res['order'] as Map));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _order == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final o = _order!;
+    final items = (o['items'] as List?) ?? [];
+    final m = o['merchant'] as Map?;
+
+    return Scaffold(
+      appBar: AppBar(title: Text('Order Detail · ${o['orderCode']}')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            color: TwoBeeColors.surfaceTonal,
+            child: ListTile(
+              leading: const Icon(Icons.receipt_long_rounded, color: TwoBeeColors.primary),
+              title: Text(m?['businessName']?.toString() ?? '2Bee Store', style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('Status: ${o['status']} · Delivered to ${o['deliveryAddress']}'),
+              trailing: Text(bdt(o['totalBdt'] as num), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Itemized Receipt', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const Divider(),
+                  ...items.map((i) => _BillRow('${i['quantity']}x ${i['itemName']}', bdt(i['lineTotalBdt'] as num))),
+                  const Divider(),
+                  _BillRow('Subtotal', bdt(o['subtotalBdt'] ?? 0)),
+                  _BillRow('Delivery Fee', bdt(o['deliveryFeeBdt'] ?? 0)),
+                  _BillRow('Packaging & Service', bdt(((o['packagingFeeBdt'] ?? 0) as num) + ((o['serviceFeeBdt'] ?? 0) as num))),
+                  _BillRow('Promo Discount', '-${bdt(o['discountBdt'] ?? 0)}'),
+                  const Divider(),
+                  _BillRow('Total Paid (${o['paymentMethod']})', bdt(o['totalBdt'] as num), bold: true),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            onPressed: () {
+              if (m != null) {
+                for (final it in items) {
+                  ref.read(cartProvider.notifier).addItem(
+                        merchantId: m['id'] as String,
+                        merchantName: m['businessName'] as String,
+                        deliveryFee: (o['deliveryFeeBdt'] as num).toDouble(),
+                        line: CartLine(
+                          menuItemId: it['menuItemId'] as String,
+                          name: it['itemName'] as String,
+                          basePrice: (it['unitPriceBdt'] as num).toDouble(),
+                          quantity: (it['quantity'] as num).toInt(),
+                        ),
+                      );
+                }
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
+              }
+            },
+            icon: const Icon(Icons.replay_rounded),
+            label: const Text('Reorder Same Items'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportLegalScreen(title: 'Order Support'))),
+            icon: const Icon(Icons.help_outline),
+            label: const Text('Need Help / Issue'),
+          ),
+        ],
       ),
     );
   }

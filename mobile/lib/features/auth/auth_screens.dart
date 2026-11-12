@@ -366,11 +366,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 }).toList(),
               ),
               const SizedBox(height: 28),
-              Center(
-                child: TextButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportLegalScreen())),
-                  child: const Text('Terms of Service & Privacy Policy', style: TextStyle(fontSize: 12)),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton(
+                    onPressed: () => context.go('/onboarding'),
+                    child: const Text('Replay Onboarding 1–3', style: TextStyle(fontSize: 12)),
+                  ),
+                  const Text('·', style: TextStyle(color: TwoBeeColors.textSecondary)),
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportLegalScreen())),
+                    child: const Text('Terms & Privacy', style: TextStyle(fontSize: 12)),
+                  ),
+                  const Text('·', style: TextStyle(color: TwoBeeColors.textSecondary)),
+                  TextButton(
+                    onPressed: () => context.push('/screens'),
+                    child: const Text('All Screens', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  ),
+                ],
               ),
             ],
           ),
@@ -576,6 +589,11 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
       appBar: AppBar(
         title: const Text('Choose Your 2Bee Role'),
         actions: [
+          TextButton.icon(
+            onPressed: () => context.push('/screens'),
+            icon: const Icon(Icons.account_tree_outlined, size: 18),
+            label: const Text('All Flows'),
+          ),
           TextButton(
             onPressed: () async {
               await ref.read(authControllerProvider.notifier).logout();

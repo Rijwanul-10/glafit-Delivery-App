@@ -362,6 +362,55 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
               ),
             ],
             const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isHk ? 'Hourly Dispatch Activity' : 'Orders by Hour (Today)',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 82,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          for (final bar in [
+                            ('12p', 0.45),
+                            ('1p', 0.85),
+                            ('2p', 0.70),
+                            ('5p', 0.40),
+                            ('7p', 0.95),
+                            ('8p', 0.80),
+                            ('9p', 0.55),
+                          ])
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Container(
+                                  width: 20,
+                                  height: 54 * bar.$2,
+                                  decoration: BoxDecoration(
+                                    color: bar.$2 > 0.75 ? TwoBeeColors.primary : TwoBeeColors.primarySoft,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(bar.$1, style: const TextStyle(fontSize: 10, color: TwoBeeColors.textSecondary)),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             // Prominent Menu quick access replacing 5th Menu bottom tab!
             Card(
               color: TwoBeeColors.obsidian,
@@ -738,6 +787,7 @@ class _MerchantWalletTab extends ConsumerStatefulWidget {
 
 class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
   Map<String, dynamic>? _data;
+  String _period = 'WEEK';
   bool _loading = true;
 
   @override
@@ -776,6 +826,16 @@ class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'TODAY', label: Text('Today')),
+                      ButtonSegment(value: 'WEEK', label: Text('Week')),
+                      ButtonSegment(value: 'MONTH', label: Text('Month')),
+                    ],
+                    selected: {_period},
+                    onSelectionChanged: (v) => setState(() => _period = v.first),
+                  ),
+                  const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -854,30 +914,19 @@ class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
                             width: double.infinity,
                             child: OutlinedButton.icon(
                               onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (_) => AlertDialog(
-                                    title: const Text('Merchant Payout Statement'),
-                                    content: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('Gross Sales: ${bdt(summary['grossSalesBdt'] ?? 0)}'),
-                                        Text('Platform Commission (${summary['commissionRatePct'] ?? 15}%): -${bdt(summary['commissionBdt'] ?? 0)}'),
-                                        Text('Net Earnings: ${bdt(summary['netEarningsBdt'] ?? 0)}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                                        const Divider(),
-                                        Text('Payout Account: ${payout?['provider'] ?? 'Bank'} · ${payout?['maskedAccount'] ?? 'Primary account'}'),
-                                        Text('Schedule: ${summary['payoutSchedule'] ?? 'Weekly Friday'}'),
-                                        const SizedBox(height: 6),
-                                        const Text('PDF endpoint: /api/v1/merchant/panel/wallet/statement-pdf', style: TextStyle(fontSize: 11, color: TwoBeeColors.textSecondary)),
-                                      ],
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => MerchantPayoutStatementScreen(
+                                      summary: Map<String, dynamic>.from(summary),
+                                      payoutAccount: payout != null ? Map<String, dynamic>.from(payout) : null,
+                                      transactions: txs,
                                     ),
-                                    actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
                                   ),
                                 );
                               },
                               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                              label: const Text('View Payout Statement (PDF)'),
+                              label: const Text('View Payout Statement ->'),
                             ),
                           ),
                         ],
@@ -1109,6 +1158,16 @@ class _MerchantSplitStoreTab extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.go('/roles'),
                 ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(
+                    Icons.account_tree_outlined,
+                    color: TwoBeeColors.primary,
+                  ),
+                  title: const Text('Preview All 2Bee Screens & Step Flows'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => context.push('/screens'),
+                ),
               ],
             ),
           ),
@@ -1291,46 +1350,12 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
     }
   }
 
-  Future<void> _addItemDialog() async {
-    final nameCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    final priceCtrl = TextEditingController(text: '250');
-    bool bestseller = false;
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text('Add Menu Item'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Item Name')),
-              const SizedBox(height: 8),
-              TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description')),
-              const SizedBox(height: 8),
-              TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (৳)')),
-              CheckboxListTile(value: bestseller, onChanged: (v) => setS(() => bestseller = v ?? false), title: const Text('Mark as Bestseller')),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () async {
-                final token = ref.read(authControllerProvider).merchantRoleToken;
-                await ref.read(apiClientProvider).post('/merchant/panel/menu/items', roleToken: token, body: {
-                  'name': nameCtrl.text.trim(),
-                  'description': descCtrl.text.trim(),
-                  'priceBdt': double.tryParse(priceCtrl.text) ?? 250,
-                  'isBestseller': bestseller,
-                });
-                if (ctx.mounted) Navigator.pop(ctx);
-                _load();
-              },
-              child: const Text('Save Item'),
-            ),
-          ],
-        ),
-      ),
+  Future<void> _openEditor({Map<String, dynamic>? item}) async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => AddOrEditMenuItemScreen(existingItem: item)),
     );
+    if (saved == true) _load();
   }
 
   @override
@@ -1340,7 +1365,7 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: TwoBeeColors.primary,
         foregroundColor: Colors.white,
-        onPressed: _addItemDialog,
+        onPressed: () => _openEditor(),
         icon: const Icon(Icons.add),
         label: const Text('Add Item'),
       ),
@@ -1361,31 +1386,219 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
                   for (final item in (c['items'] as List))
                     Card(
                       margin: const EdgeInsets.only(bottom: 8),
-                      child: SwitchListTile(
+                      child: ListTile(
                         title: Text(
                           '${item['name']} · ${bdt(item['priceBdt'] as num)}',
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         subtitle: Text(item['description']?.toString() ?? ''),
-                        value: item['inStock'] == true,
-                        onChanged: (v) async {
-                          final token = ref
-                              .read(authControllerProvider)
-                              .merchantRoleToken;
-                          await ref
-                              .read(apiClientProvider)
-                              .patch(
-                                '/merchant/panel/menu/items/${item['id']}',
-                                roleToken: token,
-                                body: {'inStock': v},
-                              );
-                          _load();
-                        },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: TwoBeeColors.primary),
+                              onPressed: () => _openEditor(item: Map<String, dynamic>.from(item as Map)),
+                            ),
+                            Switch(
+                              value: item['inStock'] == true,
+                              onChanged: (v) async {
+                                final token = ref.read(authControllerProvider).merchantRoleToken;
+                                await ref.read(apiClientProvider).patch(
+                                      '/merchant/panel/menu/items/${item['id']}',
+                                      roleToken: token,
+                                      body: {'inStock': v},
+                                    );
+                                _load();
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                 ],
               ],
             ),
+    );
+  }
+}
+
+class AddOrEditMenuItemScreen extends ConsumerStatefulWidget {
+  final Map<String, dynamic>? existingItem;
+  const AddOrEditMenuItemScreen({super.key, this.existingItem});
+
+  @override
+  ConsumerState<AddOrEditMenuItemScreen> createState() => _AddOrEditMenuItemScreenState();
+}
+
+class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScreen> {
+  final _nameCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _priceCtrl = TextEditingController(text: '250');
+  final _strikeCtrl = TextEditingController();
+  int _prepMins = 20;
+  bool _bestseller = false;
+  bool _inStock = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final it = widget.existingItem;
+    if (it != null) {
+      _nameCtrl.text = it['name']?.toString() ?? '';
+      _descCtrl.text = it['description']?.toString() ?? '';
+      _priceCtrl.text = (it['priceBdt'] ?? 250).toString();
+      _bestseller = it['isBestseller'] == true;
+      _inStock = it['inStock'] != false;
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final token = ref.read(authControllerProvider).merchantRoleToken;
+      final body = {
+        'name': _nameCtrl.text.trim(),
+        'description': _descCtrl.text.trim(),
+        'priceBdt': double.tryParse(_priceCtrl.text) ?? 250,
+        'isBestseller': _bestseller,
+        'inStock': _inStock,
+      };
+      if (widget.existingItem != null) {
+        await ref.read(apiClientProvider).patch(
+              '/merchant/panel/menu/items/${widget.existingItem!['id']}',
+              roleToken: token,
+              body: body,
+            );
+      } else {
+        await ref.read(apiClientProvider).post('/merchant/panel/menu/items', roleToken: token, body: body);
+      }
+      if (mounted) Navigator.pop(context, true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.existingItem != null;
+    return Scaffold(
+      appBar: AppBar(title: Text(isEdit ? 'Edit Menu Item' : 'Add New Dish')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            height: 110,
+            decoration: BoxDecoration(color: TwoBeeColors.surfaceTonal, borderRadius: BorderRadius.circular(14)),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add_a_photo_outlined, size: 32, color: TwoBeeColors.primary),
+                SizedBox(height: 6),
+                Text('Dish Photo Ready (Tap to update)', style: TextStyle(color: TwoBeeColors.primary, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Item Name')),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: TextField(controller: _priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sale Price (৳)'))),
+              const SizedBox(width: 10),
+              Expanded(child: TextField(controller: _strikeCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Original Price (৳ optional)'))),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(controller: _descCtrl, maxLength: 200, maxLines: 2, decoration: const InputDecoration(labelText: 'Description (max 200 chars)')),
+          const SizedBox(height: 6),
+          const Text('Estimated Prep Time', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            children: [10, 15, 20, 30, 45].map((m) => ChoiceChip(label: Text('${m}m'), selected: _prepMins == m, onSelected: (_) => setState(() => _prepMins = m))).toList(),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(value: _bestseller, onChanged: (v) => setState(() => _bestseller = v), title: const Text('Feature as Bestseller')),
+          SwitchListTile(value: _inStock, onChanged: (v) => setState(() => _inStock = v), title: const Text('In Stock / Available')),
+          const SizedBox(height: 18),
+          ElevatedButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Saving...' : 'Save Menu Item')),
+        ],
+      ),
+    );
+  }
+}
+
+class MerchantPayoutStatementScreen extends StatelessWidget {
+  final Map<String, dynamic> summary;
+  final Map<String, dynamic>? payoutAccount;
+  final List<dynamic> transactions;
+
+  const MerchantPayoutStatementScreen({
+    super.key,
+    required this.summary,
+    this.payoutAccount,
+    required this.transactions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Payout Statement')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(color: TwoBeeColors.obsidian, borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('NET SETTLEMENT', style: TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w700, fontSize: 12)),
+                Text(bdt(summary['netEarningsBdt'] ?? 0), style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900)),
+                Text('Schedule: ${summary['payoutSchedule'] ?? 'Every Friday at 12:00 AM GMT+6'}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Gross Delivered Sales'), Text(bdt(summary['grossSalesBdt'] ?? 0))]),
+                  const SizedBox(height: 6),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Platform Commission (${summary['commissionRatePct'] ?? 15}%)'), Text('-${bdt(summary['commissionBdt'] ?? 0)}')]),
+                  const Divider(),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Destination Account'), Text('${payoutAccount?['provider'] ?? 'Bank'} · ${payoutAccount?['maskedAccount'] ?? 'Primary'}')]),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text('Itemized Statement Breakdown', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          if (transactions.isEmpty)
+            const Card(child: Padding(padding: EdgeInsets.all(14), child: Text('No settled orders in this cycle yet.')))
+          else
+            ...transactions.map((tx) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    title: Text(tx['description']?.toString() ?? 'Delivered Order Settlement'),
+                    subtitle: Text(tx['txType']?.toString() ?? ''),
+                    trailing: Text(bdt(tx['amountBdt'] ?? 0), style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+                  ),
+                )),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('PDF Statement generated cleanly (/api/v1/merchant/panel/wallet/statement-pdf)')),
+            ),
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            label: const Text('Download Statement PDF'),
+          ),
+        ],
+      ),
     );
   }
 }

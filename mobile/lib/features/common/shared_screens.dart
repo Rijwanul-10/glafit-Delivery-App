@@ -288,40 +288,186 @@ Future<void> showSosSafetySheet(BuildContext context, WidgetRef ref, {required S
   );
 }
 
-class SupportLegalScreen extends StatelessWidget {
+class SupportLegalScreen extends StatefulWidget {
   final String title;
   const SupportLegalScreen({super.key, this.title = 'Help & Legal'});
 
   @override
+  State<SupportLegalScreen> createState() => _SupportLegalScreenState();
+}
+
+class _SupportLegalScreenState extends State<SupportLegalScreen> {
+  final _ticketCtrl = TextEditingController();
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(widget.title)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Card(
+            color: TwoBeeColors.surfaceTonal,
             child: ListTile(
               leading: const Icon(Icons.support_agent_rounded, color: TwoBeeColors.primary),
-              title: const Text('2Bee 24/7 Dhaka Support'),
+              title: const Text('2Bee 24/7 Dhaka Support', style: TextStyle(fontWeight: FontWeight.w800)),
               subtitle: const Text('Hotline: 16216 · support@2bee.app'),
-              onTap: () => launchUrl(Uri.parse('tel:16216')),
+              trailing: FilledButton(
+                onPressed: () => launchUrl(Uri.parse('tel:16216')),
+                child: const Text('Call'),
+              ),
             ),
           ),
           const SizedBox(height: 12),
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.gavel_outlined, color: TwoBeeColors.primary),
+                  title: const Text('Terms of Service'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const TermsAndPrivacyScreen(initialTab: 0)),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.privacy_tip_outlined, color: TwoBeeColors.primary),
+                  title: const Text('Privacy Policy & Data Protection'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const TermsAndPrivacyScreen(initialTab: 1)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text('Frequently Asked Questions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+          const SizedBox(height: 6),
           const Card(
+            child: ExpansionTile(
+              title: Text('Food Orders, Home Kitchens & Refunds', style: TextStyle(fontWeight: FontWeight.w600)),
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  child: Text('Home Kitchens operate with verified daily batch quotas and cutoff times. Instant refunds apply automatically if a merchant rejects or cancels your order.'),
+                ),
+              ],
+            ),
+          ),
+          const Card(
+            child: ExpansionTile(
+              title: Text('Parcel Tiers & Front Carrier Protection', style: TextStyle(fontWeight: FontWeight.w600)),
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  child: Text('Normal parcels up to 8 kg qualify for eco dispatch. Recipients share a 4-digit Delivery Security PIN at handover.'),
+                ),
+              ],
+            ),
+          ),
+          const Card(
+            child: ExpansionTile(
+              title: Text('Rider Multi-Service & Payout Security Holds', style: TextStyle(fontWeight: FontWeight.w600)),
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  child: Text('Multi-service pairs only Normal Front-Carrier parcels along matching Zone A -> B corridors, always dropping passengers first. Payout changes enforce SMS OTP + 48h hold.'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Terms, Privacy & Multi-Service Safety Policy', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                  SizedBox(height: 8),
-                  Text(
-                    '1. One account per verified Bangladesh phone number (+880).\n'
-                    '2. Rider 4-digit passcode and Merchant 6-digit post-approval passcode enforce 15-minute auto-lock and 48-hour payout guard holds.\n'
-                    '3. Multi-service dispatches only pair Normal Front-Carrier parcels (<= 8kg) with Ride requests along matching Zone A -> Zone B corridors. Passenger and Parcel clients never see each other\'s service details.',
+                  const Text('Report an Issue / Support Ticket', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _ticketCtrl,
+                    maxLines: 3,
+                    decoration: const InputDecoration(hintText: 'Describe your trip, parcel, food order or payout question...'),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () {
+                      final refNo = '2B-SUP-${DateTime.now().millisecondsSinceEpoch % 10000}';
+                      _ticketCtrl.clear();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Support ticket $refNo submitted! Response ETA < 15 mins.')),
+                      );
+                    },
+                    child: const Text('Submit Support Ticket'),
                   ),
                 ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class TermsAndPrivacyScreen extends StatefulWidget {
+  final int initialTab; // 0: Terms, 1: Privacy
+  const TermsAndPrivacyScreen({super.key, this.initialTab = 0});
+
+  @override
+  State<TermsAndPrivacyScreen> createState() => _TermsAndPrivacyScreenState();
+}
+
+class _TermsAndPrivacyScreenState extends State<TermsAndPrivacyScreen> {
+  late int _tab = widget.initialTab;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(_tab == 0 ? 'Terms of Service' : 'Privacy Policy')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 0, label: Text('Terms of Service')),
+              ButtonSegment(value: 1, label: Text('Privacy Policy')),
+            ],
+            selected: {_tab},
+            onSelectionChanged: (v) => setState(() => _tab = v.first),
+          ),
+          const SizedBox(height: 14),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _tab == 0
+                    ? const [
+                        Text('2Bee Super-App Terms of Service (v1.0)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                        SizedBox(height: 10),
+                        Text('1. Account Identity: One verified Bangladesh mobile phone (+8801XXXXXXXXX) unlocks Client, Rider, and Merchant roles under isolated role tokens.'),
+                        SizedBox(height: 8),
+                        Text('2. Role Security: Riders create a permanent 4-digit PIN during registration. Merchants set NO passcode while KYC is pending and must create a fixed 6-digit PIN via OTP upon admin approval. Sessions lock after 15 minutes of inactivity.'),
+                        SizedBox(height: 8),
+                        Text('3. Multi-Service Compliance: Eligible only for Normal parcels (<= 8 kg & <= 31,500 cm3) along Zone A -> Zone B corridors. Passengers are dropped first before final parcel delivery.'),
+                        SizedBox(height: 8),
+                        Text('4. Payout Protection: Bank / MFS payout changes require SMS OTP and a mandatory 48-hour security hold.'),
+                      ]
+                    : const [
+                        Text('2Bee Privacy & Isolation Policy', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                        SizedBox(height: 10),
+                        Text('1. Strict Service Isolation: Parcel Senders/Recipients and Ride Passengers NEVER see each other\'s identity, route overlap, or multi-service batching metadata.'),
+                        SizedBox(height: 8),
+                        Text('2. Telemetry & Tracking: Rider GPS updates stream over encrypted WebSocket rooms isolated strictly per active order or trip ID.'),
+                        SizedBox(height: 8),
+                        Text('3. KYC Documents: NID, Driving License, Trade License, and Selfies are stored strictly for identity verification and regulatory compliance.'),
+                      ],
               ),
             ),
           ),

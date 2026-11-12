@@ -110,10 +110,15 @@ class _ParcelHubScreenState extends ConsumerState<ParcelHubScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_step == 0 ? 'Send Parcel' : _step == 1 ? 'Package Specs (1/2)' : 'Addresses & Pay (2/2)')),
+      appBar: AppBar(title: Text(_step == 0 ? '1. Hub & Rate Calculator' : _step == 1 ? '2. Package & Carrier Specs' : '3. Addresses & Payment')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          LinearProgressIndicator(value: (_step + 1) / 3, color: TwoBeeColors.primary, backgroundColor: TwoBeeColors.surfaceTonal),
+          const SizedBox(height: 8),
+          Text('Step ${_step + 1} of 3 · ${_step == 0 ? 'Hub & Tier' : _step == 1 ? 'Weight & Box' : 'Contacts & Payment'}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TwoBeeColors.textSecondary)),
+          const SizedBox(height: 12),
           if (_step == 0) ...[
             Card(
               child: Padding(
@@ -394,36 +399,40 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
     }
   }
 
-  Future<void> _rateParcel() async {
-    int stars = 5;
-    await showDialog(
+  Future<void> _advanceDemo() async {
+    await ref.read(apiClientProvider).post('/common/demo/advance-parcel/${widget.parcelId}');
+    await _load();
+  }
+
+  Future<void> _confirmCancel() async {
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text('Rate Parcel Delivery'),
-          content: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(
-              5,
-              (i) => IconButton(
-                onPressed: () => setS(() => stars = i + 1),
-                icon: Icon(i < stars ? Icons.star : Icons.star_border, color: Colors.amber),
-              ),
-            ),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Shipment & Refund'),
+        content: const Text('Are you sure you want to cancel this parcel? Online charges (if paid) will be refunded automatically.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep Parcel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: TwoBeeColors.errorText),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Cancel'),
           ),
-          actions: [
-            ElevatedButton(
-              onPressed: () async {
-                await ref.read(apiClientProvider).post('/parcels/${widget.parcelId}/rate', body: {'rating': stars});
-                if (ctx.mounted) Navigator.pop(ctx);
-                _load();
-              },
-              child: const Text('Submit Rating'),
-            ),
-          ],
-        ),
+        ],
       ),
     );
+    if (confirm == true) {
+      await ref.read(apiClientProvider).post('/parcels/${widget.parcelId}/cancel');
+      _load();
+    }
+  }
+
+  Future<void> _rateParcel() async {
+    if (_shipment == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ParcelDeliveredRatingScreen(shipment: _shipment!)),
+    );
+    _load();
   }
 
   @override
@@ -549,22 +558,137 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
                 ),
               ),
             ),
-            if (['BOOKED', 'MATCHING', 'RIDER_ASSIGNED'].contains(s['status'])) ...[
+            if (['BOOKED', 'MATCHING', 'RIDER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'].contains(s['status'])) ...[
               const SizedBox(height: 12),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: TwoBeeColors.obsidian),
+                onPressed: _advanceDemo,
+                icon: const Icon(Icons.fast_forward_rounded),
+                label: const Text('Preview: Simulate Next Parcel Stage ->'),
+              ),
+            ],
+            if (['BOOKED', 'MATCHING', 'RIDER_ASSIGNED'].contains(s['status'])) ...[
+              const SizedBox(height: 10),
               OutlinedButton(
-                onPressed: () async {
-                  await ref.read(apiClientProvider).post('/parcels/${widget.parcelId}/cancel');
-                  _load();
-                },
+                onPressed: _confirmCancel,
                 child: const Text('Cancel Shipment & Refund'),
               ),
             ],
-            if (s['status'] == 'DELIVERED' && s['rating'] == null) ...[
+            if (s['status'] == 'DELIVERED') ...[
               const SizedBox(height: 14),
-              ElevatedButton(onPressed: _rateParcel, child: const Text('Rate Parcel Service')),
+              ElevatedButton(
+                onPressed: _rateParcel,
+                child: Text(s['rating'] == null ? 'Rate Parcel Delivery & View Receipt ->' : 'View Delivery Receipt & Rating'),
+              ),
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class ParcelDeliveredRatingScreen extends ConsumerStatefulWidget {
+  final Map<String, dynamic> shipment;
+  const ParcelDeliveredRatingScreen({super.key, required this.shipment});
+
+  @override
+  ConsumerState<ParcelDeliveredRatingScreen> createState() => _ParcelDeliveredRatingScreenState();
+}
+
+class _ParcelDeliveredRatingScreenState extends ConsumerState<ParcelDeliveredRatingScreen> {
+  int _stars = 5;
+  final _tags = <String>{'Fast Delivery', 'Package Intact'};
+  final _commentCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.shipment;
+    final alreadyRated = s['rating'] != null;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Parcel Delivered & Receipt')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const CircleAvatar(
+            radius: 36,
+            backgroundColor: TwoBeeColors.surfaceTonal,
+            child: Icon(Icons.verified_rounded, color: TwoBeeColors.primary, size: 40),
+          ),
+          const SizedBox(height: 12),
+          Text('Shipment ${s['trackingCode']} Delivered!', textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text('Received by ${s['recipientName']}', textAlign: TextAlign.center, style: const TextStyle(color: TwoBeeColors.textSecondary)),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Parcel Summary & Receipt', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const Divider(),
+                  Text('Route: ${s['pickupAddress']} -> ${s['dropoffAddress']}'),
+                  Text('Package: ${s['category']} (${s['weightKg']} kg · ${s['tier']})'),
+                  Text('Delivery Charge: ${bdt(s['deliveryChargeBdt'] as num)} (${s['paymentMethod']})'),
+                  if ((s['codCollectBdt'] as num) > 0) Text('COD Collected: ${bdt(s['codCollectBdt'] as num)}'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (!alreadyRated) ...[
+            const Text('Rate Your Courier Experience', style: TextStyle(fontWeight: FontWeight.w800)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                5,
+                (i) => IconButton(
+                  iconSize: 34,
+                  onPressed: () => setState(() => _stars = i + 1),
+                  icon: Icon(i < _stars ? Icons.star_rounded : Icons.star_border_rounded, color: Colors.amber),
+                ),
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: ['Fast Delivery', 'Package Intact', 'Polite Rider', 'On-Time PIN Handover'].map((t) {
+                final sel = _tags.contains(t);
+                return FilterChip(
+                  label: Text(t),
+                  selected: sel,
+                  onSelected: (v) => setState(() => v ? _tags.add(t) : _tags.remove(t)),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+            TextField(controller: _commentCtrl, decoration: const InputDecoration(labelText: 'Feedback Note (optional)')),
+            const SizedBox(height: 18),
+            ElevatedButton(
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      setState(() => _saving = true);
+                      await ref.read(apiClientProvider).post('/parcels/${s['id']}/rate', body: {
+                        'rating': _stars,
+                        'comment': '${_tags.join(", ")} ${_commentCtrl.text.trim()}'.trim(),
+                      });
+                      if (context.mounted) Navigator.pop(context);
+                    },
+              child: Text(_saving ? 'Submitting...' : 'Submit Rating & Done'),
+            ),
+          ] else
+            Card(
+              color: TwoBeeColors.surfaceTonal,
+              child: ListTile(
+                leading: const Icon(Icons.star_rounded, color: Colors.amber),
+                title: Text('Rated ${s['rating']}/5 Stars'),
+                subtitle: Text(s['ratingComment']?.toString() ?? 'Thank you for your feedback!'),
+              ),
+            ),
+        ],
       ),
     );
   }

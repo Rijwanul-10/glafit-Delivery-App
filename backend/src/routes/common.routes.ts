@@ -152,5 +152,161 @@ protectedCommon.post(
   }),
 );
 
+// Non-production solo preview simulation routes (lets a single browser user advance order/dispatch steps live)
+if (env.nodeEnv !== 'production') {
+  protectedCommon.post(
+    '/demo/advance-food/:id',
+    asyncHandler(async (req, res) => {
+      const prisma = getPrisma();
+      const order = await prisma.foodOrder.findUnique({ where: { id: String(req.params.id) } });
+      if (!order) throw new HttpError(404, 'ORDER_NOT_FOUND', 'Food order not found');
+      const rider = await prisma.riderProfile.findFirst({ where: { kycStatus: 'APPROVED' } });
+      const seq = ['PLACED', 'PREPARING', 'READY_FOR_PICKUP', 'PICKED_UP', 'DELIVERED'] as const;
+      const idx = seq.indexOf(order.status as (typeof seq)[number]);
+      const nextStatus = idx >= 0 && idx < seq.length - 1 ? seq[idx + 1] : 'DELIVERED';
+      const updated = await prisma.foodOrder.update({
+        where: { id: order.id },
+        data: {
+          status: nextStatus,
+          riderId: order.riderId ?? (idx >= 2 ? rider?.id : undefined),
+          prepTimeMins: order.prepTimeMins ?? 20,
+        },
+        include: { items: true, merchant: true, rider: { include: { user: true } } },
+      });
+      getIO()?.to(`tracking:food:${order.id}`).emit('order:status', { orderId: order.id, status: nextStatus });
+      res.json({ ok: true, order: updated });
+    }),
+  );
+
+  protectedCommon.post(
+    '/demo/advance-parcel/:id',
+    asyncHandler(async (req, res) => {
+      const prisma = getPrisma();
+      const parcel = await prisma.parcelShipment.findUnique({ where: { id: String(req.params.id) } });
+      if (!parcel) throw new HttpError(404, 'PARCEL_NOT_FOUND', 'Parcel not found');
+      const rider = await prisma.riderProfile.findFirst({ where: { kycStatus: 'APPROVED' } });
+      const seq = ['BOOKED', 'RIDER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'] as const;
+      const normalized = parcel.status === 'MATCHING' ? 'BOOKED' : parcel.status;
+      const idx = seq.indexOf(normalized as (typeof seq)[number]);
+      const nextStatus = idx >= 0 && idx < seq.length - 1 ? seq[idx + 1] : 'DELIVERED';
+      const updated = await prisma.parcelShipment.update({
+        where: { id: parcel.id },
+        data: {
+          status: nextStatus,
+          riderId: parcel.riderId ?? rider?.id,
+        },
+      });
+      getIO()?.to(`tracking:parcel:${parcel.id}`).emit('parcel:status', { parcelId: parcel.id, status: nextStatus });
+      res.json({ ok: true, shipment: updated });
+    }),
+  );
+
+  protectedCommon.post(
+    '/demo/advance-ride/:id',
+    asyncHandler(async (req, res) => {
+      const prisma = getPrisma();
+      const trip = await prisma.rideTrip.findUnique({ where: { id: String(req.params.id) } });
+      if (!trip) throw new HttpError(404, 'RIDE_NOT_FOUND', 'Ride not found');
+      const rider = await prisma.riderProfile.findFirst({ where: { kycStatus: 'APPROVED' } });
+      const seq = ['MATCHING', 'RIDER_ASSIGNED', 'ARRIVED_PICKUP', 'ON_TRIP', 'COMPLETED'] as const;
+      const idx = seq.indexOf(trip.status as (typeof seq)[number]);
+      const nextStatus = idx >= 0 && idx < seq.length - 1 ? seq[idx + 1] : 'COMPLETED';
+      const updated = await prisma.rideTrip.update({
+        where: { id: trip.id },
+        data: {
+          status: nextStatus,
+          riderId: trip.riderId ?? rider?.id,
+        },
+      });
+      getIO()?.to(`tracking:ride:${trip.id}`).emit('ride:status', { tripId: trip.id, status: nextStatus });
+      res.json({ ok: true, trip: updated });
+    }),
+  );
+
+  protectedCommon.post(
+    '/demo/seed-dispatch',
+    asyncHandler(async (_req, res) => {
+      const prisma = getPrisma();
+      const client = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' } });
+      if (!client) throw new HttpError(400, 'NO_USER', 'No client user seeded');
+
+      const existingParcel = await prisma.parcelShipment.findFirst({ where: { status: { in: ['BOOKED', 'MATCHING'] } } });
+      let parcel = existingParcel;
+      if (!parcel) {
+        parcel = await prisma.parcelShipment.create({
+          data: {
+            trackingCode: `2B-P${Math.floor(1000 + Math.random() * 9000)}`,
+            userId: client.id,
+            tier: 'NORMAL_ECO',
+            packageSizeClass: 'SMALL',
+            category: 'Documents',
+            weightKg: 2.0,
+            lengthCm: 30,
+            widthCm: 20,
+            heightCm: 15,
+            volumeCm3: 9000,
+            fitsFrontCarrier: true,
+            isProtected: true,
+            protectionFeeBdt: 15,
+            senderName: client.fullName ?? 'Tanvir Ahmed',
+            senderPhone: client.phone,
+            pickupAddress: 'Road 11, Banani',
+            originZoneId: 'zone-banani',
+            pickupLat: 23.7937,
+            pickupLng: 90.4066,
+            recipientName: 'Farhana Yasmin',
+            recipientPhone: '+8801811111111',
+            dropoffAddress: 'Road 13, Sector 7, Uttara',
+            destinationZoneId: 'zone-uttara',
+            dropoffLat: 23.8726,
+            dropoffLng: 90.3983,
+            distanceKm: 9.2,
+            deliveryPin: '4821',
+            deliveryChargeBdt: 95,
+            riderPayoutBdt: 80,
+            codCollectBdt: 500,
+            paymentMethod: 'COD',
+            paymentStatus: 'PENDING',
+            status: 'MATCHING',
+          },
+        });
+      }
+
+      const existingRide = await prisma.rideTrip.findFirst({
+        where: { status: 'MATCHING', pickupZoneId: 'zone-banani', dropoffZoneId: 'zone-uttara' },
+      });
+      let ride = existingRide;
+      if (!ride) {
+        ride = await prisma.rideTrip.create({
+          data: {
+            tripCode: `2B-R${Math.floor(1000 + Math.random() * 9000)}`,
+            userId: client.id,
+            fleetTier: '2BEE_EV_SOLO',
+            pickupAddress: 'Banani Road 11',
+            pickupZoneId: 'zone-banani',
+            pickupLat: 23.7937,
+            pickupLng: 90.4066,
+            dropoffAddress: 'Uttara Sector 7',
+            dropoffZoneId: 'zone-uttara',
+            dropoffLat: 23.8726,
+            dropoffLng: 90.3983,
+            distanceKm: 9.2,
+            etaMins: 24,
+            baseFareBdt: 35,
+            distanceFareBdt: 130,
+            totalFareBdt: 165,
+            riderPayoutBdt: 135,
+            startPin: '7391',
+            paymentMethod: 'COD',
+            paymentStatus: 'PENDING',
+            status: 'MATCHING',
+          },
+        });
+      }
+      res.json({ ok: true, parcel, ride });
+    }),
+  );
+}
+
 commonRouter.use('/', protectedCommon);
 
