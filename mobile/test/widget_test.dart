@@ -5,6 +5,7 @@ import 'package:twobee_app/core/theme/twobee_theme.dart';
 import 'package:twobee_app/core/widgets/app_bottom_nav.dart';
 import 'package:twobee_app/core/widgets/common_widgets.dart';
 import 'package:twobee_app/features/auth/auth_screens.dart';
+import 'package:twobee_app/features/client/client_food_screens.dart';
 
 void main() {
   testWidgets('Option B AppBottomNav renders role-tailored 4 tabs for Client, Rider, Merchant', (tester) async {
@@ -109,5 +110,36 @@ void main() {
     expect(find.text('bKash (Preview)'), findsOneWidget);
     expect(find.text('Nagad (Preview)'), findsOneWidget);
     expect(find.text('Rocket (Preview)'), findsOneWidget);
+  });
+
+  testWidgets('TwoBeeCartAction renders persistent cart button with dynamic badge', (tester) async {
+    final container = ProviderContainer();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: TwoBeeTheme.light(),
+          home: Scaffold(
+            appBar: AppBar(
+              title: const Text('Food Home'),
+              actions: const [TwoBeeCartAction()],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(TwoBeeCartAction), findsOneWidget);
+    expect(find.byIcon(Icons.shopping_bag_outlined), findsOneWidget);
+
+    container.read(cartProvider.notifier).addItem(
+          merchantId: 'test-merchant',
+          merchantName: 'Test Kitchen',
+          deliveryFee: 40,
+          line: CartLine(menuItemId: 'item-1', name: 'Biryani', basePrice: 300, quantity: 2),
+        );
+    await tester.pump();
+
+    expect(find.text('2'), findsOneWidget);
   });
 }

@@ -116,6 +116,30 @@ class CartNotifier extends StateNotifier<CartState> {
 
 final cartProvider = StateNotifierProvider<CartNotifier, CartState>((ref) => CartNotifier());
 
+/// Persistent Cart icon button displayed steadily at the top of food screens with a dynamic badge.
+class TwoBeeCartAction extends ConsumerWidget {
+  const TwoBeeCartAction({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cart = ref.watch(cartProvider);
+    final count = cart.totalItems;
+    return IconButton(
+      tooltip: count > 0 ? 'Cart ($count items)' : 'Cart',
+      icon: Badge(
+        isLabelVisible: count > 0,
+        label: Text('$count', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white)),
+        backgroundColor: TwoBeeColors.primary,
+        child: const Icon(Icons.shopping_bag_outlined),
+      ),
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CartScreen()),
+      ),
+    );
+  }
+}
+
 class FoodHomeScreen extends ConsumerStatefulWidget {
   const FoodHomeScreen({super.key});
 
@@ -149,7 +173,6 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cart = ref.watch(cartProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('2Bee Food'),
@@ -162,6 +185,7 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesScreen())),
             icon: const Icon(Icons.favorite_border_rounded),
           ),
+          const TwoBeeCartAction(),
           const TwoBeeHomeAction(),
         ],
       ),
@@ -229,17 +253,6 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: cart.totalItems > 0
-          ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: ElevatedButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen())),
-                  child: Text('${cart.totalItems} item(s) · ${bdt(cart.subtotal)} · View Cart'),
-                ),
-              ),
-            )
-          : null,
     );
   }
 }
@@ -286,7 +299,10 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
           decoration: const InputDecoration(hintText: 'Search Kacchi, Home Kitchen...', border: InputBorder.none),
           onChanged: _search,
         ),
-        actions: const [TwoBeeHomeAction()],
+        actions: const [
+          TwoBeeCartAction(),
+          TwoBeeHomeAction(),
+        ],
       ),
       body: Column(
         children: [
@@ -367,7 +383,13 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Favorites'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Favorites'),
+        actions: const [
+          TwoBeeCartAction(),
+          TwoBeeHomeAction(),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -488,7 +510,6 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
     final m = _merchant!;
     final cats = (m['categories'] as List?) ?? [];
     final promos = (m['promotions'] as List?) ?? [];
-    final cart = ref.watch(cartProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -508,6 +529,7 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
               }
             },
           ),
+          const TwoBeeCartAction(),
           const TwoBeeHomeAction(),
         ],
       ),
@@ -651,17 +673,6 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
           ],
         ],
       ),
-      bottomNavigationBar: cart.totalItems > 0
-          ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: ElevatedButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen())),
-                  child: Text('${cart.totalItems} item(s) · ${bdt(cart.subtotal)} · View Cart'),
-                ),
-              ),
-            )
-          : null,
     );
   }
 }
@@ -1183,7 +1194,13 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
     final imgUrl = item['imageUrl']?.toString();
 
     return Scaffold(
-      appBar: AppBar(title: Text(item['name'].toString()), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: Text(item['name'].toString()),
+        actions: const [
+          TwoBeeCartAction(),
+          TwoBeeHomeAction(),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1401,19 +1418,30 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
                       quantity: _qty,
                     ),
                   );
-              if (removed != null) {
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(
-                    SnackBar(
-                      duration: const Duration(milliseconds: 1800),
-                      content: Text('Previous items from $removed were removed'),
+
+              Navigator.pop(context);
+
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  SnackBar(
+                    duration: const Duration(milliseconds: 2200),
+                    content: Text(
+                      removed != null
+                          ? 'Previous items from $removed were removed. Added ${_qty}x ${item['name']} to cart.'
+                          : 'Added ${_qty}x ${item['name']} to cart',
                     ),
-                  );
-              }
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const CartScreen()));
+                    action: SnackBarAction(
+                      label: 'View Cart',
+                      textColor: TwoBeeColors.primary,
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
+                      },
+                    ),
+                  ),
+                );
             },
-            child: Text('Add to Cart · ${bdt(lineTotal)} ->'),
+            child: Text('Add to Cart · ${bdt(lineTotal)}'),
           ),
         ),
       ),
