@@ -1413,11 +1413,28 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
                     Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: (item['imageUrl'] != null && item['imageUrl'].toString().isNotEmpty)
+                              ? Image.network(
+                                  item['imageUrl'].toString(),
+                                  width: 52,
+                                  height: 52,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => _menuItemPlaceholder(),
+                                )
+                              : _menuItemPlaceholder(),
+                        ),
                         title: Text(
                           '${item['name']} · ${bdt(item['priceBdt'] as num)}',
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
-                        subtitle: Text(item['description']?.toString() ?? ''),
+                        subtitle: Text(
+                          item['description']?.toString() ?? '',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => _openEditor(item: Map<String, dynamic>.from(item as Map)),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -1446,6 +1463,20 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
             ),
     );
   }
+
+  Widget _menuItemPlaceholder() {
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: TwoBeeColors.surfaceTonal,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Center(
+        child: Icon(Icons.restaurant_rounded, color: TwoBeeColors.primary, size: 24),
+      ),
+    );
+  }
 }
 
 class AddOrEditMenuItemScreen extends ConsumerStatefulWidget {
@@ -1461,6 +1492,7 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
   final _descCtrl = TextEditingController();
   final _priceCtrl = TextEditingController(text: '250');
   final _strikeCtrl = TextEditingController();
+  final _imageUrlCtrl = TextEditingController();
   int _prepMins = 20;
   bool _bestseller = false;
   bool _inStock = true;
@@ -1474,19 +1506,41 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
       _nameCtrl.text = it['name']?.toString() ?? '';
       _descCtrl.text = it['description']?.toString() ?? '';
       _priceCtrl.text = (it['priceBdt'] ?? 250).toString();
+      _strikeCtrl.text = it['strikePriceBdt'] != null ? it['strikePriceBdt'].toString() : '';
+      _imageUrlCtrl.text = it['imageUrl']?.toString() ?? '';
+      _prepMins = (it['prepTimeMins'] as num?)?.toInt() ?? 20;
       _bestseller = it['isBestseller'] == true;
       _inStock = it['inStock'] != false;
     }
   }
 
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    _priceCtrl.dispose();
+    _strikeCtrl.dispose();
+    _imageUrlCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _save() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter an item name')));
+      return;
+    }
     setState(() => _saving = true);
     try {
       final token = ref.read(authControllerProvider).merchantRoleToken;
-      final body = {
-        'name': _nameCtrl.text.trim(),
+      final img = _imageUrlCtrl.text.trim();
+      final body = <String, dynamic>{
+        'name': name,
         'description': _descCtrl.text.trim(),
         'priceBdt': double.tryParse(_priceCtrl.text) ?? 250,
+        'strikePriceBdt': double.tryParse(_strikeCtrl.text),
+        'prepTimeMins': _prepMins,
+        'imageUrl': img.isNotEmpty ? img : null,
         'isBestseller': _bestseller,
         'inStock': _inStock,
       };
@@ -1500,9 +1554,20 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
         await ref.read(apiClientProvider).post('/merchant/panel/menu/items', roleToken: token, body: body);
       }
       if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Widget _photoChip(String label, String url) {
+    final selected = _imageUrlCtrl.text.trim() == url;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => setState(() => _imageUrlCtrl.text = url),
+    );
   }
 
   @override
@@ -1513,17 +1578,92 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Container(
-            height: 110,
-            decoration: BoxDecoration(color: TwoBeeColors.surfaceTonal, borderRadius: BorderRadius.circular(14)),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+          if (_imageUrlCtrl.text.trim().isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  Image.network(
+                    _imageUrlCtrl.text.trim(),
+                    height: 150,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 150,
+                      color: TwoBeeColors.surfaceTonal,
+                      child: const Center(
+                        child: Text('Invalid image URL or failed to load', style: TextStyle(color: Colors.red)),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: IconButton.filledTonal(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => setState(() => _imageUrlCtrl.clear()),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            Container(
+              height: 110,
+              decoration: BoxDecoration(
+                color: TwoBeeColors.surfaceTonal,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: TwoBeeColors.borderSoft),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_a_photo_outlined, size: 36, color: TwoBeeColors.primary),
+                  SizedBox(height: 6),
+                  Text('Select a food photo preset or paste URL below',
+                      style: TextStyle(color: TwoBeeColors.primary, fontWeight: FontWeight.w600, fontSize: 13)),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          const Text('Curated Food Photo Presets:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+          const SizedBox(height: 6),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                Icon(Icons.add_a_photo_outlined, size: 32, color: TwoBeeColors.primary),
-                SizedBox(height: 6),
-                Text('Dish Photo Ready (Tap to update)', style: TextStyle(color: TwoBeeColors.primary, fontWeight: FontWeight.w600)),
+                _photoChip('Kacchi', 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800'),
+                const SizedBox(width: 6),
+                _photoChip('Tehari', 'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800'),
+                const SizedBox(width: 6),
+                _photoChip('Khichuri & Beef', 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=800'),
+                const SizedBox(width: 6),
+                _photoChip('Fish Curry', 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800'),
+                const SizedBox(width: 6),
+                _photoChip('Roast Polao', 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=800'),
+                const SizedBox(width: 6),
+                _photoChip('Firni & Sweets', 'https://images.unsplash.com/photo-1541832676-9b763b0239ab?w=800'),
+                const SizedBox(width: 6),
+                _photoChip('Roti & Veg', 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800'),
               ],
             ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _imageUrlCtrl,
+            decoration: InputDecoration(
+              labelText: 'Custom Dish Image URL',
+              hintText: 'https://...',
+              prefixIcon: const Icon(Icons.link_rounded),
+              suffixIcon: _imageUrlCtrl.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () => setState(() => _imageUrlCtrl.clear()),
+                    )
+                  : null,
+            ),
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 14),
           TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Item Name')),

@@ -209,54 +209,123 @@ export async function runSeed(): Promise<void> {
     create: { userId: restUser.id, role: 'MERCHANT', balanceBdt: 18450 },
   });
 
-  if ((await prisma.menuCategory.count({ where: { merchantId: restProfile.id } })) === 0) {
-    const cat = await prisma.menuCategory.create({
-      data: { merchantId: restProfile.id, name: 'Kacchi & Platters', sortOrder: 1 },
-    });
-    await prisma.menuItem.createMany({
-      data: [
-        {
-          merchantId: restProfile.id,
-          categoryId: cat.id,
-          name: 'Mutton Kacchi (Basmati)',
-          description: 'Slow-cooked tender mutton with aged basmati rice, potato, and plum.',
-          priceBdt: 480,
-          strikePriceBdt: 520,
-          prepTimeMins: 20,
-          isBestseller: true,
-          optionGroupsJson: [
-            {
-              title: 'Portion Size',
-              required: true,
-              maxSelect: 1,
-              options: [
-                { id: 'reg', name: 'Half (1 Person)', extraBdt: 0 },
-                { id: 'full', name: 'Full (2 Persons)', extraBdt: 380 },
-              ],
-            },
-            {
-              title: 'Add-ons & Extras',
-              required: false,
-              maxSelect: 3,
-              options: [
-                { id: 'borhani', name: 'Shahi Borhani (250ml)', extraBdt: 80 },
-                { id: 'jali', name: 'Jali Kabab', extraBdt: 75 },
-              ],
-            },
-          ],
-        },
-        {
-          merchantId: restProfile.id,
-          categoryId: cat.id,
-          name: 'Beef Tehari Special',
-          description: 'Aromatic mustard-oil infused Chini Gura rice with tender beef.',
-          priceBdt: 340,
-          prepTimeMins: 18,
-          isBestseller: false,
-          optionGroupsJson: [],
-        },
-      ],
-    });
+  // Reset menu items for demo restaurant to ensure rich images and options are seeded
+  await prisma.menuCategory.deleteMany({ where: { merchantId: restProfile.id } });
+
+  const cat = await prisma.menuCategory.create({
+    data: { merchantId: restProfile.id, name: 'Kacchi & Platters', sortOrder: 1 },
+  });
+  await prisma.menuItem.createMany({
+    data: [
+      {
+        merchantId: restProfile.id,
+        categoryId: cat.id,
+        name: 'Mutton Kacchi (Basmati)',
+        description: 'Slow-cooked tender mutton with aged basmati rice, spiced potato, and dried plum.',
+        priceBdt: 480,
+        strikePriceBdt: 520,
+        prepTimeMins: 20,
+        imageUrl: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800',
+        isBestseller: true,
+        optionGroupsJson: [
+          {
+            title: 'Portion Size',
+            required: true,
+            maxSelect: 1,
+            options: [
+              { id: 'reg', name: 'Half (1 Person)', extraBdt: 0 },
+              { id: 'full', name: 'Full (2 Persons)', extraBdt: 380 },
+            ],
+          },
+          {
+            title: 'Add-ons & Extras',
+            required: false,
+            maxSelect: 3,
+            options: [
+              { id: 'borhani', name: 'Shahi Borhani (250ml)', extraBdt: 80 },
+              { id: 'jali', name: 'Jali Kabab', extraBdt: 75 },
+              { id: 'mutton', name: 'Extra Mutton Piece', extraBdt: 180 },
+            ],
+          },
+        ],
+      },
+      {
+        merchantId: restProfile.id,
+        categoryId: cat.id,
+        name: 'Beef Tehari Special',
+        description: 'Old Dhaka style mustard-oil infused Chinigura rice with flavorful beef cubes.',
+        priceBdt: 340,
+        strikePriceBdt: 380,
+        prepTimeMins: 18,
+        imageUrl: 'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800',
+        isBestseller: true,
+        optionGroupsJson: [
+          {
+            title: 'Portion Size',
+            required: true,
+            maxSelect: 1,
+            options: [
+              { id: 'reg', name: 'Regular Plate', extraBdt: 0 },
+              { id: 'large', name: 'Large Platter', extraBdt: 120 },
+            ],
+          },
+          {
+            title: 'Sides & Drinks',
+            required: false,
+            maxSelect: 2,
+            options: [
+              { id: 'egg', name: 'Boiled Egg', extraBdt: 30 },
+              { id: 'borhani', name: 'Shahi Borhani (250ml)', extraBdt: 80 },
+            ],
+          },
+        ],
+      },
+      {
+        merchantId: restProfile.id,
+        categoryId: cat.id,
+        name: 'Shahi Morog Polao',
+        description: 'Golden spiced chicken roast with traditional aromatic ghee bhat, beresta & egg.',
+        priceBdt: 390,
+        strikePriceBdt: 420,
+        prepTimeMins: 22,
+        imageUrl: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=800',
+        isBestseller: false,
+        optionGroupsJson: [
+          {
+            title: 'Spice Preference',
+            required: true,
+            maxSelect: 1,
+            options: [
+              { id: 'mild', name: 'Mild Traditional', extraBdt: 0 },
+              { id: 'spicy', name: 'Rich Spiced Roast', extraBdt: 0 },
+            ],
+          },
+          {
+            title: 'Extras',
+            required: false,
+            maxSelect: 2,
+            options: [
+              { id: 'roast', name: 'Extra Roast Quarter', extraBdt: 160 },
+              { id: 'borhani', name: 'Borhani', extraBdt: 80 },
+            ],
+          },
+        ],
+      },
+      {
+        merchantId: restProfile.id,
+        categoryId: cat.id,
+        name: 'Shahi Firni & Borhani Pack',
+        description: 'Traditional clay matka firni garnished with saffron, pistachio and chilled borhani.',
+        priceBdt: 160,
+        prepTimeMins: 10,
+        imageUrl: 'https://images.unsplash.com/photo-1541832676-9b763b0239ab?w=800',
+        isBestseller: false,
+        optionGroupsJson: [],
+      },
+    ],
+  });
+
+  if ((await prisma.promotion.count({ where: { merchantId: restProfile.id } })) === 0) {
     await prisma.promotion.create({
       data: {
         merchantId: restProfile.id,
@@ -316,40 +385,107 @@ export async function runSeed(): Promise<void> {
     create: { userId: hkUser.id, role: 'MERCHANT', balanceBdt: 6420 },
   });
 
-  if ((await prisma.menuCategory.count({ where: { merchantId: hkProfile.id } })) === 0) {
-    const cat = await prisma.menuCategory.create({
-      data: { merchantId: hkProfile.id, name: "Tonight's Home Batch", sortOrder: 1 },
-    });
-    await prisma.menuItem.createMany({
-      data: [
-        {
-          merchantId: hkProfile.id,
-          categoryId: cat.id,
-          name: 'Bhuna Khichuri & Beef Kala Bhuna',
-          description: 'Freshly cooked home batch with mustard-fried egg & achar.',
-          priceBdt: 320,
-          prepTimeMins: 30,
-          isBestseller: true,
-          availableTonight: true,
-          optionGroupsJson: [],
-        },
-        {
-          merchantId: hkProfile.id,
-          categoryId: cat.id,
-          name: 'Rui Fish Curry & Plain Rice',
-          description: 'Comfort home meal with lentil dal & green chili.',
-          priceBdt: 240,
-          prepTimeMins: 25,
-          isBestseller: false,
-          availableTonight: true,
-          optionGroupsJson: [],
-        },
-      ],
-    });
-  }
+  // Reset menu items for demo home kitchen
+  await prisma.menuCategory.deleteMany({ where: { merchantId: hkProfile.id } });
+
+  const hkCat = await prisma.menuCategory.create({
+    data: { merchantId: hkProfile.id, name: "Tonight's Home Batch", sortOrder: 1 },
+  });
+  await prisma.menuItem.createMany({
+    data: [
+      {
+        merchantId: hkProfile.id,
+        categoryId: hkCat.id,
+        name: 'Bhuna Khichuri & Beef Kala Bhuna',
+        description: 'Freshly cooked home batch with mustard-fried egg, traditional achar, and thick dal.',
+        priceBdt: 320,
+        strikePriceBdt: 360,
+        prepTimeMins: 30,
+        imageUrl: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=800',
+        isBestseller: true,
+        availableTonight: true,
+        optionGroupsJson: [
+          {
+            title: 'Spice Level',
+            required: true,
+            maxSelect: 1,
+            options: [
+              { id: 'medium', name: 'Medium Traditional Spice', extraBdt: 0 },
+              { id: 'spicy', name: 'Extra Jhal Kala Bhuna', extraBdt: 0 },
+            ],
+          },
+          {
+            title: 'Add-ons & Sides',
+            required: false,
+            maxSelect: 2,
+            options: [
+              { id: 'egg', name: 'Mustard Fried Egg', extraBdt: 35 },
+              { id: 'achar', name: 'Extra Mango Achar', extraBdt: 25 },
+            ],
+          },
+        ],
+      },
+      {
+        merchantId: hkProfile.id,
+        categoryId: hkCat.id,
+        name: 'Rui Fish Curry & Plain Rice',
+        description: 'Comfort Bengali home meal cooked with fresh Rui fish, potato, potol, and lentil dal.',
+        priceBdt: 240,
+        prepTimeMins: 25,
+        imageUrl: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800',
+        isBestseller: false,
+        availableTonight: true,
+        optionGroupsJson: [
+          {
+            title: 'Fish Cut Choice',
+            required: true,
+            maxSelect: 1,
+            options: [
+              { id: 'peti', name: 'Peti Cut (Tender Belly)', extraBdt: 20 },
+              { id: 'gada', name: 'Gada Cut (Center Piece)', extraBdt: 0 },
+            ],
+          },
+          {
+            title: 'Sides',
+            required: false,
+            maxSelect: 2,
+            options: [
+              { id: 'dal', name: 'Thick Masoor Dal', extraBdt: 30 },
+              { id: 'begun', name: 'Fried Eggplant (Begun Bhaja)', extraBdt: 40 },
+            ],
+          },
+        ],
+      },
+      {
+        merchantId: hkProfile.id,
+        categoryId: hkCat.id,
+        name: 'Chitol Macher Muitha',
+        description: 'Hand-beaten boneless fish dumpling curry made from fresh local river Chitol.',
+        priceBdt: 380,
+        strikePriceBdt: 420,
+        prepTimeMins: 35,
+        imageUrl: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?w=800',
+        isBestseller: true,
+        availableTonight: true,
+        optionGroupsJson: [],
+      },
+      {
+        merchantId: hkProfile.id,
+        categoryId: hkCat.id,
+        name: 'Panchmishali Sobji & Hand Roti',
+        description: 'Wholesome mixed seasonal vegetables cooked home-style with 4 soft atta rotis.',
+        priceBdt: 180,
+        prepTimeMins: 20,
+        imageUrl: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800',
+        isBestseller: false,
+        availableTonight: true,
+        optionGroupsJson: [],
+      },
+    ],
+  });
 }
 
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('seed.ts')) {
+if (process.argv[1]?.includes('seed')) {
   initPrisma()
     .then(() => runSeed())
     .then(() => {

@@ -456,32 +456,20 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
     }
   }
 
+  Widget _dishThumbnailFallback() {
+    return Container(
+      width: 76,
+      height: 76,
+      color: TwoBeeColors.surfaceTonal,
+      child: const Center(
+        child: Icon(Icons.restaurant_rounded, color: TwoBeeColors.primary, size: 28),
+      ),
+    );
+  }
+
   Future<void> _openCustomization(Map item) async {
-    final groups = (item['optionGroupsJson'] as List?) ?? [];
-    final m = _merchant!;
-    if (groups.isEmpty) {
-      final removed = ref.read(cartProvider.notifier).addItem(
-            merchantId: m['id'] as String,
-            merchantName: m['businessName'] as String,
-            deliveryFee: (m['deliveryFeeBdt'] as num).toDouble(),
-            line: CartLine(
-              menuItemId: item['id'] as String,
-              name: item['name'] as String,
-              basePrice: (item['priceBdt'] as num).toDouble(),
-            ),
-          );
-      if (removed != null && mounted) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              duration: const Duration(milliseconds: 1800),
-              content: Text('Previous items from $removed were removed'),
-            ),
-          );
-      }
-      return;
-    }
+    final m = _merchant;
+    if (m == null) return;
 
     await Navigator.push(
       context,
@@ -551,14 +539,112 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
             const SizedBox(height: 8),
             for (final item in (cat['items'] as List))
               Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: ListTile(
-                  title: Text(item['name'].toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('${item['description'] ?? ''}\n${bdt(item['priceBdt'] as num)}'),
-                  isThreeLine: true,
-                  trailing: FilledButton(
-                    onPressed: item['inStock'] == true ? () => _openCustomization(item as Map) : null,
-                    child: Text(item['inStock'] == true ? '+ Add' : 'Out'),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: TwoBeeColors.borderSoft),
+                ),
+                margin: const EdgeInsets.only(bottom: 12),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: item['inStock'] == true ? () => _openCustomization(item as Map) : null,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: (item['imageUrl'] != null && item['imageUrl'].toString().isNotEmpty)
+                              ? Image.network(
+                                  item['imageUrl'].toString(),
+                                  width: 76,
+                                  height: 76,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => _dishThumbnailFallback(),
+                                )
+                              : _dishThumbnailFallback(),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item['name'].toString(),
+                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                                    ),
+                                  ),
+                                  if (item['isBestseller'] == true) ...[
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: TwoBeeColors.primary.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        '★ Popular',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          color: TwoBeeColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              if (item['description'] != null && item['description'].toString().isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  item['description'].toString(),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Text(
+                                    bdt(item['priceBdt'] as num),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                      color: TwoBeeColors.primary,
+                                    ),
+                                  ),
+                                  if (item['strikePriceBdt'] != null) ...[
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      bdt(item['strikePriceBdt'] as num),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: TwoBeeColors.textSecondary,
+                                        decoration: TextDecoration.lineThrough,
+                                      ),
+                                    ),
+                                  ],
+                                  const Spacer(),
+                                  FilledButton.tonal(
+                                    style: FilledButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    onPressed: item['inStock'] == true ? () => _openCustomization(item as Map) : null,
+                                    child: Text(item['inStock'] == true ? '+ Add' : 'Out'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1064,6 +1150,26 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
   int _qty = 1;
 
   @override
+  void initState() {
+    super.initState();
+    final groups = (widget.item['optionGroupsJson'] as List?) ?? [];
+    for (final g in groups) {
+      if (g['required'] == true) {
+        final opts = (g['options'] as List?) ?? [];
+        if (opts.isNotEmpty) {
+          _selected[g['title'] as String] = [Map<String, dynamic>.from(opts.first as Map)];
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final item = widget.item;
     final groups = (item['optionGroupsJson'] as List?) ?? [];
@@ -1074,70 +1180,198 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
       }
     }
     final lineTotal = ((item['priceBdt'] as num).toDouble() + extra) * _qty;
+    final imgUrl = item['imageUrl']?.toString();
 
     return Scaffold(
       appBar: AppBar(title: Text(item['name'].toString()), actions: const [TwoBeeHomeAction()]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (imgUrl != null && imgUrl.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  imgUrl,
+                  height: 190,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
           Container(
             padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(color: TwoBeeColors.surfaceTonal, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(
+              color: TwoBeeColors.surfaceTonal,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: TwoBeeColors.borderSoft),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item['name'].toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text(item['description']?.toString() ?? '', style: const TextStyle(color: TwoBeeColors.textSecondary)),
-                const SizedBox(height: 8),
-                Text('Base Price: ${bdt(item['priceBdt'] as num)}', style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item['name'].toString(),
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    if (item['isBestseller'] == true)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: TwoBeeColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          '★ Bestseller',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: TwoBeeColors.primary),
+                        ),
+                      ),
+                  ],
+                ),
+                if (item['description'] != null && item['description'].toString().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    item['description'].toString(),
+                    style: const TextStyle(color: TwoBeeColors.textSecondary, fontSize: 13, height: 1.3),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Text(
+                      'Price: ${bdt(item['priceBdt'] as num)}',
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: TwoBeeColors.primary),
+                    ),
+                    if (item['strikePriceBdt'] != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        bdt(item['strikePriceBdt'] as num),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: TwoBeeColors.textSecondary,
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: TwoBeeColors.borderSoft),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.schedule_rounded, size: 14, color: TwoBeeColors.textSecondary),
+                          const SizedBox(width: 4),
+                          Text(
+                            '~${item['prepTimeMins'] ?? 20}m prep',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: TwoBeeColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
           const SizedBox(height: 14),
-          for (final g in groups) ...[
-            Text('${g['title']} ${g['required'] == true ? '(Required)' : '(Optional)'}',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-            const SizedBox(height: 6),
-            Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: Column(
+          if (groups.isNotEmpty) ...[
+            for (final g in groups) ...[
+              Text(
+                '${g['title']} ${g['required'] == true ? '(Required)' : '(Optional)'}',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+              ),
+              const SizedBox(height: 6),
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: TwoBeeColors.borderSoft),
+                ),
+                child: Column(
+                  children: [
+                    for (final opt in (g['options'] as List))
+                      CheckboxListTile(
+                        title: Text(
+                          (opt['extraBdt'] as num) > 0
+                              ? '${opt['name']} (+${bdt(opt['extraBdt'] as num)})'
+                              : '${opt['name']}',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        value: (_selected[g['title']] ?? []).any((o) => o['id'] == opt['id']),
+                        onChanged: (v) {
+                          setState(() {
+                            final list = _selected[g['title']] ?? [];
+                            if (g['required'] == true) {
+                              _selected[g['title'] as String] = [Map<String, dynamic>.from(opt as Map)];
+                            } else if (v == true) {
+                              _selected[g['title'] as String] = [...list, Map<String, dynamic>.from(opt as Map)];
+                            } else {
+                              _selected[g['title'] as String] = list.where((o) => o['id'] != opt['id']).toList();
+                            }
+                          });
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: TwoBeeColors.surfaceTonal,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: TwoBeeColors.borderSoft),
+              ),
+              child: const Row(
                 children: [
-                  for (final opt in (g['options'] as List))
-                    CheckboxListTile(
-                      title: Text('${opt['name']} (+${bdt(opt['extraBdt'] as num)})'),
-                      value: (_selected[g['title']] ?? []).any((o) => o['id'] == opt['id']),
-                      onChanged: (v) {
-                        setState(() {
-                          final list = _selected[g['title']] ?? [];
-                          if (g['required'] == true) {
-                            _selected[g['title'] as String] = [Map<String, dynamic>.from(opt as Map)];
-                          } else if (v == true) {
-                            _selected[g['title'] as String] = [...list, Map<String, dynamic>.from(opt as Map)];
-                          } else {
-                            _selected[g['title'] as String] = list.where((o) => o['id'] != opt['id']).toList();
-                          }
-                        });
-                      },
+                  Icon(Icons.check_circle_outline_rounded, color: TwoBeeColors.primary, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Prepared fresh to order with chef secret recipe',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
+                  ),
                 ],
               ),
             ),
+            const SizedBox(height: 12),
           ],
           TextField(
             controller: _noteCtrl,
-            decoration: const InputDecoration(labelText: 'Special Kitchen Instructions (optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Special Kitchen Instructions (optional)',
+              hintText: 'e.g. Less spicy, separate sauce, extra napkins...',
+            ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              IconButton(onPressed: () => setState(() => _qty = (_qty - 1).clamp(1, 20)), icon: const Icon(Icons.remove_circle_outline, size: 30)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Text('$_qty', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              IconButton(
+                onPressed: () => setState(() => _qty = (_qty - 1).clamp(1, 20)),
+                icon: const Icon(Icons.remove_circle_outline, size: 32, color: TwoBeeColors.primary),
               ),
-              IconButton(onPressed: () => setState(() => _qty++), icon: const Icon(Icons.add_circle_outline, size: 30)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: Text('$_qty', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+              ),
+              IconButton(
+                onPressed: () => setState(() => _qty++),
+                icon: const Icon(Icons.add_circle_outline, size: 32, color: TwoBeeColors.primary),
+              ),
             ],
           ),
         ],

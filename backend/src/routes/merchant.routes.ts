@@ -547,6 +547,7 @@ panel.post(
       priceBdt: z.number().positive(),
       strikePriceBdt: z.number().positive().optional(),
       prepTimeMins: z.number().int().min(5).max(120).default(20),
+      imageUrl: z.string().optional().nullable(),
       isBestseller: z.boolean().default(false),
       inStock: z.boolean().default(true),
       availableTonight: z.boolean().default(true),
@@ -572,6 +573,7 @@ panel.post(
         priceBdt: parsed.priceBdt,
         strikePriceBdt: parsed.strikePriceBdt,
         prepTimeMins: parsed.prepTimeMins,
+        imageUrl: parsed.imageUrl,
         isBestseller: parsed.isBestseller,
         inStock: parsed.inStock,
         availableTonight: parsed.availableTonight,
@@ -593,10 +595,13 @@ panel.patch(
     const schema = z.object({
       name: z.string().optional(),
       priceBdt: z.number().positive().optional(),
+      strikePriceBdt: z.number().positive().optional().nullable(),
       inStock: z.boolean().optional(),
       availableTonight: z.boolean().optional(),
       isBestseller: z.boolean().optional(),
       description: z.string().optional(),
+      imageUrl: z.string().optional().nullable(),
+      prepTimeMins: z.number().int().optional(),
     });
     const updated = await prisma.menuItem.update({
       where: { id: existing.id },
