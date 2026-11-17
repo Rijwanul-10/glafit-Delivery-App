@@ -523,8 +523,9 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
                 'targetId': m['id'],
               });
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(res['favorited'] == true ? 'Added to Favorites' : 'Removed from Favorites')),
+                showAutoDismissToast(
+                  context,
+                  res['favorited'] == true ? 'Added to Favorites' : 'Removed from Favorites',
                 );
               }
             },
@@ -1421,25 +1422,10 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
 
               Navigator.pop(context);
 
-              ScaffoldMessenger.of(context)
-                ..hideCurrentSnackBar()
-                ..showSnackBar(
-                  SnackBar(
-                    duration: const Duration(milliseconds: 2200),
-                    content: Text(
-                      removed != null
-                          ? 'Previous items from $removed were removed. Added ${_qty}x ${item['name']} to cart.'
-                          : 'Added ${_qty}x ${item['name']} to cart',
-                    ),
-                    action: SnackBarAction(
-                      label: 'View Cart',
-                      textColor: TwoBeeColors.primary,
-                      onPressed: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
-                      },
-                    ),
-                  ),
-                );
+              final msg = removed != null
+                  ? 'Previous items from $removed were removed. Added ${_qty}x ${item['name']} to cart.'
+                  : 'Added ${_qty}x ${item['name']} to cart';
+              showAutoDismissToast(context, msg);
             },
             child: Text('Add to Cart · ${bdt(lineTotal)}'),
           ),
@@ -1649,12 +1635,7 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
                   removed ??= r;
                 }
                 if (removed != null && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Previous items from $removed were removed'),
-                      duration: const Duration(milliseconds: 1800),
-                    ),
-                  );
+                  showAutoDismissToast(context, 'Previous items from $removed were removed');
                 }
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
               }

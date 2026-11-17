@@ -25,6 +25,32 @@ class TwoBeeHomeAction extends ConsumerWidget {
   }
 }
 
+/// Displays a modern, floating, auto-closing toast notification that automatically dismisses itself.
+void showAutoDismissToast(
+  BuildContext context,
+  String message, {
+  Duration duration = const Duration(milliseconds: 1800),
+}) {
+  final sm = ScaffoldMessenger.of(context);
+  sm.hideCurrentSnackBar();
+  sm.showSnackBar(
+    SnackBar(
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      duration: duration,
+      content: Text(
+        message,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+      ),
+    ),
+  );
+  // Programmatic dismissal timer guarantees auto-close even when mouse pointer hovers on web/desktop
+  Future.delayed(duration, () {
+    sm.hideCurrentSnackBar();
+  });
+}
+
 /// 4 individual Security/Start PIN digit tiles matching reference mockups.
 class PinDigitsRow extends StatelessWidget {
   final String pin;
