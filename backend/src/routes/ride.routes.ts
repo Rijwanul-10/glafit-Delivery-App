@@ -218,6 +218,7 @@ export function sanitizeRideForClient(trip: {
   tipBdt: number;
   rating: number | null;
   createdAt: Date;
+  updatedAt?: Date;
   rider?: {
     rating: number;
     vehicleBrandModel: string | null;
@@ -252,6 +253,7 @@ export function sanitizeRideForClient(trip: {
     tipBdt: trip.tipBdt,
     rating: trip.rating,
     createdAt: trip.createdAt,
+    updatedAt: trip.updatedAt ?? trip.createdAt,
     driver: trip.rider
       ? {
           name: trip.rider.user.fullName,
@@ -305,6 +307,68 @@ rideRouter.post(
       },
     });
     res.json({ ok: true, trip: sanitizeRideForClient(updated) });
+  }),
+);
+
+rideRouter.post(
+  '/:id/cancel-delayed-driver',
+  asyncHandler(async (req, res) => {
+    const { reason } = z
+      .object({
+        reason: z.string().min(1).default('Driver delayed to reach pickup location'),
+      })
+      .parse(req.body);
+    const prisma = getPrisma();
+    const trip = await prisma.rideTrip.findUnique({
+      where: { id: String(req.params.id) },
+      include: {
+        rider: {
+          include: { user: { select: { fullName: true, phone: true, avatarUrl: true } } },
+        },
+      },
+    });
+    if (!trip || trip.userId !== req.auth!.userId) {
+      throw new HttpError(404, 'RIDE_NOT_FOUND', 'Ride not found');
+    }
+    if (trip.status !== 'RIDER_ASSIGNED') {
+      throw new HttpError(
+        400,
+        'CANNOT_CANCEL_DRIVER',
+        trip.status === 'ARRIVED_PICKUP'
+          ? 'Driver has already arrived at your location'
+          : 'Driver cancellation only allowed while driver is en-route',
+      );
+    }
+    const previousRiderId = trip.riderId;
+    const updated = await prisma.rideTrip.update({
+      where: { id: trip.id },
+      data: {
+        riderId: null,
+        status: 'MATCHING',
+      },
+      include: {
+        rider: {
+          include: { user: { select: { fullName: true, phone: true, avatarUrl: true } } },
+        },
+      },
+    });
+
+    if (previousRiderId) {
+      getIO()?.to(`rider:${previousRiderId}`).emit('rider:job_cancelled_by_client', {
+        serviceType: 'RIDE',
+        tripId: trip.id,
+        tripCode: trip.tripCode,
+        reason,
+      });
+    }
+
+    getIO()?.to(`tracking:ride:${trip.id}`).emit('ride:status', {
+      tripId: trip.id,
+      status: 'MATCHING',
+      reason,
+    });
+
+    res.json({ ok: true, trip: sanitizeRideForClient(updated), reason });
   }),
 );
 

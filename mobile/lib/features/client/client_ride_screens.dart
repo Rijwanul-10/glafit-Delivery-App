@@ -569,11 +569,15 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
   double? _riderLat;
   double? _riderLng;
   bool _loading = true;
+  int _elapsedSeconds = 0;
+  Timer? _waitTimer;
+  bool _cancellingDriver = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _startWaitTimer();
     final sock = ref.read(socketServiceProvider);
     sock.joinTracking('ride', widget.tripId);
     sock.socket?.off('ride:status');
@@ -589,11 +593,49 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _waitTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startWaitTimer() {
+    _waitTimer?.cancel();
+    _waitTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_trip?['status'] == 'RIDER_ASSIGNED') {
+        setState(() => _elapsedSeconds++);
+      }
+    });
+  }
+
+  String _formatWaitTimer(int totalSecs) {
+    final mins = (totalSecs ~/ 60).toString().padLeft(2, '0');
+    final secs = (totalSecs % 60).toString().padLeft(2, '0');
+    return '$mins:$secs';
+  }
+
   Future<void> _load() async {
     try {
       final res = await ref.read(apiClientProvider).get('/rides/${widget.tripId}');
+      final t = Map<String, dynamic>.from(res['trip'] as Map);
+      if (!mounted) return;
+      if (t['status'] == 'MATCHING') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => RideMatchingRadarScreen(tripId: widget.tripId)),
+        );
+        return;
+      }
+      final assignedAt = DateTime.tryParse(t['updatedAt']?.toString() ?? '');
+      if (assignedAt != null && t['status'] == 'RIDER_ASSIGNED') {
+        final diff = DateTime.now().difference(assignedAt).inSeconds;
+        if (diff > _elapsedSeconds) {
+          _elapsedSeconds = diff;
+        }
+      }
       setState(() {
-        _trip = Map<String, dynamic>.from(res['trip'] as Map);
+        _trip = t;
         _riderLat ??= (_trip?['driver']?['lat'] as num?)?.toDouble();
         _riderLng ??= (_trip?['driver']?['lng'] as num?)?.toDouble();
       });
@@ -605,6 +647,119 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
   Future<void> _cancel() async {
     await ref.read(apiClientProvider).post('/rides/${widget.tripId}/cancel');
     await _load();
+  }
+
+  Future<void> _showCancelDelayedDriverSheet() async {
+    final reasons = [
+      'Driver delayed / taking too long to reach pickup',
+      'Driver is not moving / stuck in traffic',
+      'Driver asked me to cancel',
+      'Driver heading in wrong direction',
+      'Selected wrong pickup location',
+      'Other reason',
+    ];
+    String selected = reasons[0];
+
+    final confirmed = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Reason for Cancellation', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Select why you are cancelling this rider. We will unassign this driver and return to radar to find a closer 2Bee rider.',
+                  style: TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary),
+                ),
+                const SizedBox(height: 14),
+                RadioGroup<String>(
+                  groupValue: selected,
+                  onChanged: (v) {
+                    if (v != null) setModalState(() => selected = v);
+                  },
+                  child: Column(
+                    children: reasons
+                        .map((r) => RadioListTile<String>(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              value: r,
+                              title: Text(r, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                            ))
+                        .toList(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Keep Waiting'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: TwoBeeColors.errorText,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => Navigator.pop(ctx, selected),
+                        child: const Text('Confirm & Find Rider'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed == null || !mounted) return;
+
+    setState(() => _cancellingDriver = true);
+    try {
+      await ref.read(apiClientProvider).post(
+        '/rides/${widget.tripId}/cancel-delayed-driver',
+        body: {'reason': confirmed},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Rider unassigned ($confirmed). Searching for a new 2Bee rider...'),
+          backgroundColor: TwoBeeColors.primary,
+        ),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => RideMatchingRadarScreen(tripId: widget.tripId)),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not re-match rider: $e'), backgroundColor: TwoBeeColors.errorText),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cancellingDriver = false);
+    }
   }
 
   Future<void> _advanceDemo() async {
@@ -747,6 +902,95 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
                   ),
                 ),
               ),
+            if (status == 'RIDER_ASSIGNED') ...[
+              const SizedBox(height: 10),
+              if (_elapsedSeconds < 600)
+                Card(
+                  color: TwoBeeColors.surfaceTonal,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: TwoBeeColors.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.timer_outlined, color: TwoBeeColors.primary, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Driver En-Route · Waiting ${_formatWaitTimer(_elapsedSeconds)} / 10:00 mins',
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: TwoBeeColors.primary),
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'If driver does not arrive within 10 min, cancellation button unlocks to find a new rider.',
+                                style: TextStyle(fontSize: 11, color: TwoBeeColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => setState(() => _elapsedSeconds = 601),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Simulate 10m', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Card(
+                  color: TwoBeeColors.warningBg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: const BorderSide(color: TwoBeeColors.warningBorder),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: TwoBeeColors.warningText, size: 22),
+                            SizedBox(width: 8),
+                            Text(
+                              'Driver Delayed (> 10 mins elapsed)',
+                              style: TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.warningText, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Driver has not reached your pickup location within 10 minutes (${_formatWaitTimer(_elapsedSeconds)} elapsed). You can cancel this rider and search for a new 2Bee rider.',
+                          style: const TextStyle(fontSize: 12, color: TwoBeeColors.obsidian),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: TwoBeeColors.errorText,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: _cancellingDriver ? null : _showCancelDelayedDriverSheet,
+                            icon: const Icon(Icons.person_off_rounded),
+                            label: Text(_cancellingDriver ? 'Cancelling...' : 'Cancel Delayed Rider & Find New Rider'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
             const SizedBox(height: 10),
             OutlinedButton.icon(
               onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
