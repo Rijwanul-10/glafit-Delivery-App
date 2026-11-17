@@ -32,7 +32,7 @@ void showAutoDismissToast(
   Duration duration = const Duration(milliseconds: 1800),
 }) {
   final sm = ScaffoldMessenger.of(context);
-  sm.hideCurrentSnackBar();
+  sm.clearSnackBars();
   sm.showSnackBar(
     SnackBar(
       behavior: SnackBarBehavior.floating,
@@ -47,7 +47,9 @@ void showAutoDismissToast(
   );
   // Programmatic dismissal timer guarantees auto-close even when mouse pointer hovers on web/desktop
   Future.delayed(duration, () {
-    sm.hideCurrentSnackBar();
+    try {
+      sm.clearSnackBars();
+    } catch (_) {}
   });
 }
 

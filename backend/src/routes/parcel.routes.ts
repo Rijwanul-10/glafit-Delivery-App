@@ -315,6 +315,91 @@ export function sanitizeParcelForClient(p: {
 }
 
 parcelRouter.get(
+  '/incoming',
+  asyncHandler(async (req, res) => {
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({
+      where: { id: req.auth!.userId },
+      select: { phone: true },
+    });
+    if (!user?.phone) return res.json({ ok: true, shipments: [] });
+    const cleanDigits = user.phone.replace(/\D/g, '');
+    const phoneCandidates = [
+      user.phone,
+      cleanDigits,
+      `+${cleanDigits}`,
+      cleanDigits.startsWith('880') ? '0' + cleanDigits.slice(3) : cleanDigits,
+      cleanDigits.startsWith('880') ? '+880' + cleanDigits.slice(3) : '+880' + cleanDigits.replace(/^0+/, ''),
+    ].filter(Boolean);
+
+    const shipments = await prisma.parcelShipment.findMany({
+      where: {
+        OR: [
+          { recipientPhone: { in: phoneCandidates } },
+          { recipientPhone: { contains: cleanDigits.length > 9 ? cleanDigits.slice(-9) : cleanDigits } },
+        ],
+      },
+      include: {
+        rider: {
+          include: { user: { select: { fullName: true, phone: true, avatarUrl: true } } },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      ok: true,
+      shipments: shipments.map(sanitizeParcelForClient),
+    });
+  }),
+);
+
+parcelRouter.get(
+  '/sent',
+  asyncHandler(async (req, res) => {
+    const prisma = getPrisma();
+    const shipments = await prisma.parcelShipment.findMany({
+      where: { userId: req.auth!.userId },
+      include: {
+        rider: {
+          include: { user: { select: { fullName: true, phone: true, avatarUrl: true } } },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({
+      ok: true,
+      shipments: shipments.map(sanitizeParcelForClient),
+    });
+  }),
+);
+
+parcelRouter.get(
+  '/track/:codeOrId',
+  asyncHandler(async (req, res) => {
+    const prisma = getPrisma();
+    const query = String(req.params.codeOrId).trim();
+    const shipment = await prisma.parcelShipment.findFirst({
+      where: {
+        OR: [
+          { trackingCode: { equals: query, mode: 'insensitive' } },
+          { id: query },
+        ],
+      },
+      include: {
+        rider: {
+          include: { user: { select: { fullName: true, phone: true, avatarUrl: true } } },
+        },
+      },
+    });
+    if (!shipment) {
+      throw new HttpError(404, 'PARCEL_NOT_FOUND', `Parcel with code '${query}' not found`);
+    }
+    res.json({ ok: true, shipment: sanitizeParcelForClient(shipment) });
+  }),
+);
+
+parcelRouter.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const prisma = getPrisma();
@@ -326,7 +411,24 @@ parcelRouter.get(
         },
       },
     });
-    if (!shipment || shipment.userId !== req.auth!.userId) {
+    if (!shipment) {
+      throw new HttpError(404, 'PARCEL_NOT_FOUND', 'Parcel shipment not found');
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: req.auth!.userId },
+      select: { phone: true },
+    });
+    const isSender = shipment.userId === req.auth!.userId;
+    const cleanUserPhone = user?.phone?.replace(/\D/g, '') ?? '';
+    const cleanRecipient = shipment.recipientPhone.replace(/\D/g, '');
+    const isRecipient =
+      cleanUserPhone.length > 0 &&
+      cleanRecipient.length > 0 &&
+      (cleanUserPhone === cleanRecipient ||
+        cleanUserPhone.endsWith(cleanRecipient.slice(-8)) ||
+        cleanRecipient.endsWith(cleanUserPhone.slice(-8)));
+
+    if (!isSender && !isRecipient) {
       throw new HttpError(404, 'PARCEL_NOT_FOUND', 'Parcel shipment not found');
     }
     res.json({ ok: true, shipment: sanitizeParcelForClient(shipment) });

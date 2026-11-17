@@ -1,11 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:twobee_app/core/network/api_client.dart';
 import 'package:twobee_app/core/theme/twobee_theme.dart';
 import 'package:twobee_app/core/widgets/app_bottom_nav.dart';
 import 'package:twobee_app/core/widgets/common_widgets.dart';
 import 'package:twobee_app/features/auth/auth_screens.dart';
 import 'package:twobee_app/features/client/client_food_screens.dart';
+import 'package:twobee_app/features/client/client_parcel_screens.dart';
+
+class FakeApiClient extends ApiClient {
+  FakeApiClient(super.ref);
+
+  @override
+  Future<Map<String, dynamic>> get(String path, {String? roleToken, Map<String, dynamic>? query}) async {
+    if (path == '/parcels/incoming') {
+      return {'ok': true, 'shipments': <Map<String, dynamic>>[]};
+    }
+    return {'ok': true};
+  }
+}
 
 void main() {
   testWidgets('Option B AppBottomNav renders role-tailored 4 tabs for Client, Rider, Merchant', (tester) async {
@@ -141,5 +155,27 @@ void main() {
     await tester.pump();
 
     expect(find.text('2'), findsOneWidget);
+  });
+
+  testWidgets('ParcelServiceScreen has distinct Send Parcel and Receive Parcel tabs with P2P flow', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          apiClientProvider.overrideWith((ref) => FakeApiClient(ref)),
+        ],
+        child: const MaterialApp(home: ParcelServiceScreen()),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Send Parcel'), findsOneWidget);
+    expect(find.text('Receive Parcel'), findsOneWidget);
+    expect(find.text('PICKUP FROM (SENDER)'), findsOneWidget);
+    expect(find.text('DELIVER TO (RECIPIENT)'), findsOneWidget);
+
+    // Switch to Receive Parcel tab
+    await tester.tap(find.text('Receive Parcel'));
+    await tester.pump();
+
+    expect(find.textContaining('Enter Tracking Code'), findsOneWidget);
   });
 }
