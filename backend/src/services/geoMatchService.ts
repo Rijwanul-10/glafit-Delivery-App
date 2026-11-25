@@ -85,10 +85,21 @@ class GeoMatchService {
       return;
     }
     try {
+      const isTls = env.redisUrl.startsWith('rediss://');
       const client = new Redis(env.redisUrl, {
-        maxRetriesPerRequest: 1,
-        connectTimeout: 1500,
+        maxRetriesPerRequest: 2,
+        connectTimeout: 5000,
         lazyConnect: true,
+        ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
+      });
+      client.on('error', (err) => {
+        console.warn('[2Bee GeoMatchService] Redis connection warning:', err.message);
+      });
+      client.on('ready', () => {
+        this.redisReady = true;
+      });
+      client.on('end', () => {
+        this.redisReady = false;
       });
       await client.connect();
       await client.ping();

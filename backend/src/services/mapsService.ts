@@ -14,9 +14,9 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) *
+    Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return Math.max(0.5, Number((R * c * 1.25).toFixed(2))); // x1.25 Dhaka urban road factor
 }
@@ -133,85 +133,85 @@ export const mapsService = {
       return localHits.length > 0 ? localHits : dhakaPresets.slice(0, 4);
     }
 
-    // 1) Primary Bangladesh Barikoi Places autocomplete (when Barikoi enabled)
-    if (shouldUseBarikoi() && q.length >= 2) {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 2500);
-        const res = await fetch(
-          `https://barikoi.xyz/v2/api/search/autocomplete/place?api_key=${encodeURIComponent(env.barikoiApiKey)}&q=${encodeURIComponent(query)}&city=dhaka`,
-          { signal: controller.signal },
-        );
-        clearTimeout(timer);
-        if (res.ok) {
-          const data = (await res.json()) as { places?: Array<{ address: string; latitude: string; longitude: string }> };
-          if (data.places?.length) {
-            return data.places.map((p) => ({
-              displayName: p.address,
-              lat: Number(p.latitude),
-              lng: Number(p.longitude),
-            }));
+      // 1) Primary Bangladesh Barikoi Places autocomplete (when Barikoi enabled)
+      if (shouldUseBarikoi() && q.length >= 2) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2500);
+          const res = await fetch(
+            `https://barikoi.xyz/v2/api/search/autocomplete/place?api_key=${encodeURIComponent(env.barikoiApiKey)}&q=${encodeURIComponent(query)}&city=dhaka`,
+            { signal: controller.signal },
+          );
+          clearTimeout(timer);
+          if (res.ok) {
+            const data = (await res.json()) as { places?: Array<{ address: string; latitude: string; longitude: string }> };
+            if (data.places?.length) {
+              return data.places.map((p) => ({
+                displayName: p.address,
+                lat: Number(p.latitude),
+                lng: Number(p.longitude),
+              }));
+            }
+          } else {
+            console.warn('[2Bee Maps] Barikoi places HTTP', res.status, '— falling back to OSM Nominatim');
           }
-        } else {
-          console.warn('[2Bee Maps] Barikoi places HTTP', res.status, '— falling back to OSM Nominatim');
+        } catch (err) {
+          console.warn('[2Bee Maps] Barikoi places failed — falling back to OSM Nominatim:', (err as Error).message);
         }
-      } catch (err) {
-        console.warn('[2Bee Maps] Barikoi places failed — falling back to OSM Nominatim:', (err as Error).message);
       }
-    }
 
-    // 2) Optional Google Places Geocode
-    if (env.mapsProvider === 'google' && env.googleMapsServerApiKey && q.length >= 2) {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 2500);
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&components=country:BD&key=${encodeURIComponent(env.googleMapsServerApiKey)}`,
-          { signal: controller.signal },
-        );
-        clearTimeout(timer);
-        if (res.ok) {
-          const data = (await res.json()) as {
-            results?: Array<{ formatted_address: string; geometry: { location: { lat: number; lng: number } } }>;
-          };
-          if (data.results?.length) {
-            return data.results.slice(0, 5).map((r) => ({
-              displayName: r.formatted_address,
-              lat: r.geometry.location.lat,
-              lng: r.geometry.location.lng,
-            }));
+      // 2) Optional Google Places Geocode
+      if (env.mapsProvider === 'google' && env.googleMapsServerApiKey && q.length >= 2) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2500);
+          const res = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&components=country:BD&key=${encodeURIComponent(env.googleMapsServerApiKey)}`,
+            { signal: controller.signal },
+          );
+          clearTimeout(timer);
+          if (res.ok) {
+            const data = (await res.json()) as {
+              results?: Array<{ formatted_address: string; geometry: { location: { lat: number; lng: number } } }>;
+            };
+            if (data.results?.length) {
+              return data.results.slice(0, 5).map((r) => ({
+                displayName: r.formatted_address,
+                lat: r.geometry.location.lat,
+                lng: r.geometry.location.lng,
+              }));
+            }
           }
+        } catch {
+          // fallback to Nominatim / local
         }
-      } catch {
-        // fallback to Nominatim / local
       }
-    }
 
-    // 3) Free OSM Nominatim fallback (when Barikoi/Google fails or MAPS_PROVIDER=osm)
-    if (q.length >= 2) {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 2500);
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&countrycodes=bd&limit=5&q=${encodeURIComponent(query)}`,
-          { headers: { 'User-Agent': '2BeeApp/1.0' }, signal: controller.signal },
-        );
-        clearTimeout(timer);
-        if (res.ok) {
-          const items = (await res.json()) as Array<{ display_name: string; lat: string; lon: string }>;
-          if (items.length > 0) {
-            return items.map((i) => ({ displayName: i.display_name, lat: Number(i.lat), lng: Number(i.lon) }));
+      // 3) Free OSM Nominatim fallback (when Barikoi/Google fails or MAPS_PROVIDER=osm)
+      if (q.length >= 2) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2500);
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&countrycodes=bd&limit=5&q=${encodeURIComponent(query)}`,
+            { headers: { 'User-Agent': '2BeeApp/1.0' }, signal: controller.signal },
+          );
+          clearTimeout(timer);
+          if (res.ok) {
+            const items = (await res.json()) as Array<{ display_name: string; lat: string; lon: string }>;
+            if (items.length > 0) {
+              return items.map((i) => ({ displayName: i.display_name, lat: Number(i.lat), lng: Number(i.lon) }));
+            }
           }
+        } catch {
+          // ignore network error and fall back to Dhaka presets
         }
-      } catch {
-        // ignore network error and fall back to Dhaka presets
       }
-    }
 
-    if (localHits.length > 0) {
-      return localHits;
-    }
-    return dhakaPresets;
-  },
-};
+      if (localHits.length > 0) {
+        return localHits;
+      }
+      return dhakaPresets;
+    },
+  };
 
