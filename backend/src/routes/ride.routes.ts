@@ -8,17 +8,17 @@ import { resolveZoneByCoords } from '../services/zoneService.js';
 import { paymentService } from '../services/paymentService.js';
 import { geoMatchService } from '../services/geoMatchService.js';
 import { getIO } from '../realtime/socketServer.js';
+import { firebaseService } from '../services/firebaseService.js';
 import { generateReceiptPdf } from '../services/pdfService.js';
 
 export const rideRouter = Router();
-rideRouter.use(requireAuth);
 
 const FLEET_TIERS = [
-  { id: '2BEE_EV_SOLO', name: '2Bee EV Solo Bike', subtitle: 'Fast 2-wheeler EV commute', baseBdt: 40, perKmBdt: 18, minBdt: 85, etaOffsetMins: 0 },
-  { id: 'ECO_AUTO', name: '2Bee Eco Auto (EV Trike)', subtitle: 'Covered 3-wheel EV ride', baseBdt: 65, perKmBdt: 25, minBdt: 140, etaOffsetMins: 2 },
-  { id: 'COMFORT_SEDAN', name: '2Bee Comfort Sedan', subtitle: 'AC city sedan', baseBdt: 120, perKmBdt: 38, minBdt: 260, etaOffsetMins: 4 },
+  { id: '2BEE_EV_SOLO', name: '2Bee EV Solo Bike', subtitle: 'Glafit GFR-02 EV · Solo Commute', baseBdt: 40, perKmBdt: 18, minBdt: 85, etaOffsetMins: 0 },
+  { id: '2BEE_EV_EXPRESS', name: '2Bee EV Express Bike', subtitle: 'Glafit LOM Priority · Instant Dispatch', baseBdt: 55, perKmBdt: 22, minBdt: 110, etaOffsetMins: 1 },
 ] as const;
 
+// Public Route Estimation: Allows users to calculate fare & route freely
 rideRouter.post(
   '/estimate',
   asyncHandler(async (req, res) => {
@@ -63,11 +63,14 @@ rideRouter.post(
   }),
 );
 
+// Protected actions: Booking EV rides, live in-trip tracking, cancellation, driver rating
+rideRouter.use(requireAuth);
+
 rideRouter.post(
   '/request',
   asyncHandler(async (req, res) => {
     const schema = z.object({
-      fleetTier: z.enum(['2BEE_EV_SOLO', 'ECO_AUTO', 'COMFORT_SEDAN']).default('2BEE_EV_SOLO'),
+      fleetTier: z.enum(['2BEE_EV_SOLO', '2BEE_EV_EXPRESS', 'ECO_AUTO', 'COMFORT_SEDAN']).default('2BEE_EV_SOLO'),
       pickupAddress: z.string().min(2),
       pickupLat: z.number(),
       pickupLng: z.number(),
@@ -179,6 +182,26 @@ rideRouter.post(
         etaMins: trip.etaMins,
         countdownSeconds: 15,
       });
+    }
+    if (nearbyRiders.length > 0) {
+      void prisma.riderProfile
+        .findMany({ where: { id: { in: nearbyRiders.map((h) => h.riderId) } }, select: { userId: true } })
+        .then((rows) =>
+          Promise.all(
+            rows.map((r) =>
+              firebaseService.sendPushToUser(
+                r.userId,
+                {
+                  title: `New EV Ride Offer (${trip.tripCode})`,
+                  body: `${trip.pickupAddress} → ${trip.dropoffAddress} · ৳${trip.riderPayoutBdt}`,
+                  data: { type: 'RIDE_OFFER', tripId: trip.id },
+                  channelId: 'rider_offers_urgent',
+                },
+                'RIDER',
+              ),
+            ),
+          ),
+        );
     }
 
     res.status(201).json({

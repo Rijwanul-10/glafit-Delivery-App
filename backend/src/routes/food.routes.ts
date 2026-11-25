@@ -7,10 +7,10 @@ import { requireAuth } from '../middleware/auth.js';
 import { paymentService } from '../services/paymentService.js';
 import { resolveZoneByCoords } from '../services/zoneService.js';
 import { getIO } from '../realtime/socketServer.js';
+import { firebaseService } from '../services/firebaseService.js';
 import { generateReceiptPdf } from '../services/pdfService.js';
 
 export const foodRouter = Router();
-foodRouter.use(requireAuth);
 
 function startOfToday(): Date {
   const d = new Date();
@@ -25,6 +25,7 @@ function isPastCutoff(cutoffHHMM: string | null): boolean {
   return now.getHours() > h || (now.getHours() === h && now.getMinutes() > m);
 }
 
+// Public browsing: All users can explore restaurants and view dishes
 foodRouter.get(
   '/restaurants',
   asyncHandler(async (req, res) => {
@@ -130,6 +131,9 @@ foodRouter.get(
     });
   }),
 );
+
+// Protected actions: Placing orders, tracking active food orders, ratings
+foodRouter.use(requireAuth);
 
 /**
  * POST /api/v1/food/orders/checkout
@@ -314,6 +318,16 @@ foodRouter.post(
       itemsCount: order.items.length,
       expiresAt: acceptExpiresAt.toISOString(),
     });
+    void firebaseService.sendPushToUser(
+      merchant.userId,
+      {
+        title: `New Food Order ${order.orderCode}`,
+        body: `${order.items.length} item(s) · ৳${order.totalBdt} — Accept within 60s`,
+        data: { type: 'MERCHANT_NEW_ORDER', orderId: order.id },
+        channelId: 'merchant_orders_urgent',
+      },
+      'MERCHANT',
+    );
 
     res.status(201).json({ ok: true, order });
   }),

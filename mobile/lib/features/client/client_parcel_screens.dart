@@ -1027,10 +1027,10 @@ class _ParcelServiceScreenState extends ConsumerState<ParcelServiceScreen> {
                 Expanded(
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.map_outlined, size: 18),
-                    label: const Text('Track Live Courier'),
+                    label: const Text('Track Live Courier (Receiver)'),
                     onPressed: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => ParcelTrackingScreen(parcelId: parcelId)),
+                      MaterialPageRoute(builder: (_) => ReceiverParcelTrackingScreen(parcelId: parcelId)),
                     ),
                   ),
                 ),
@@ -1063,9 +1063,9 @@ class _ParcelServiceScreenState extends ConsumerState<ParcelServiceScreen> {
         trailing: TextButton(
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => ParcelTrackingScreen(parcelId: parcelId)),
+            MaterialPageRoute(builder: (_) => ReceiverParcelTrackingScreen(parcelId: parcelId, isDeliveredHistory: true)),
           ),
-          child: const Text('View'),
+          child: const Text('View Receipt'),
         ),
       ),
     );
@@ -1147,6 +1147,7 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     if (_loading || _shipment == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final s = _shipment!;
@@ -1158,51 +1159,157 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
     final isRecipient = userPhone.isNotEmpty && recipientPhone.isNotEmpty && (userPhone == recipientPhone || userPhone.endsWith(recipientPhone) || recipientPhone.endsWith(userPhone));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(isRecipient ? 'Incoming Parcel ${s['trackingCode']}' : 'Parcel ${s['trackingCode']}'),
-        actions: const [TwoBeeHomeAction()],
-      ),
+      backgroundColor: TwoBeeColors.scaffoldBg,
       body: RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Status and PIN Card
-            Card(
-              color: TwoBeeColors.surfaceTonal,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: TwoBeeColors.borderSoft)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
+        child: CustomScrollView(
+          slivers: [
+            // Map Top Viewport
+            SliverAppBar(
+              expandedHeight: 250,
+              pinned: true,
+              backgroundColor: TwoBeeColors.scaffoldBg,
+              leading: Container(
+                margin: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: TwoBeeShadows.softCard,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded, color: TwoBeeColors.textPrimary),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              title: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: TwoBeeRadii.pill,
+                  boxShadow: TwoBeeShadows.softCard,
+                ),
+                child: Text(
+                  isRecipient ? 'Incoming Parcel' : 'Location Tracking',
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: TwoBeeColors.textPrimary),
+                ),
+              ),
+              actions: const [TwoBeeHomeAction()],
+              flexibleSpace: FlexibleSpaceBar(
+                background: Stack(
+                  children: [
+                    const Positioned.fill(
+                      child: TwoBeeMapPreview(height: 250),
+                    ),
+                    // Ambient gradient overlay
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 40,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              TwoBeeColors.obsidian.withValues(alpha: 0.8),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Deep Forest Obsidian Bottom Sheet (Ref 1 & 2 Aligned)
+            SliverToBoxAdapter(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: TwoBeeColors.obsidian,
+                  borderRadius: TwoBeeRadii.sheetTop,
+                  boxShadow: TwoBeeShadows.dockNav,
+                ),
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 36),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Pull Indicator
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Booking Header Row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          s['statusBanner']?.toString() ?? 'Courier En-Route',
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: TwoBeeColors.primary),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('TRACKING ID', style: TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+                            const SizedBox(height: 2),
+                            Text(
+                              '#${s['trackingCode']}',
+                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, fontFamily: 'monospace'),
+                            ),
+                          ],
                         ),
-                        ActionChip(
-                          avatar: const Icon(Icons.copy_rounded, size: 14),
-                          label: Text(s['trackingCode'].toString(), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
-                          onPressed: () {
-                            showAutoDismissToast(context, 'Tracking code ${s['trackingCode']} copied!');
-                          },
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: TwoBeeColors.primary.withValues(alpha: 0.18),
+                            borderRadius: TwoBeeRadii.pill,
+                            border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.4)),
+                          ),
+                          child: Text(
+                            s['statusBanner']?.toString() ?? 'In-Transit',
+                            style: const TextStyle(color: TwoBeeColors.primary, fontWeight: FontWeight.w900, fontSize: 12),
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text('${s['pickupAddress']} → ${s['dropoffAddress']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 14),
 
-                    // Delivery Verification PIN
+                    // Pickup -> Dropoff Route
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: TwoBeeColors.borderSoft),
+                        color: TwoBeeColors.obsidianCard,
+                        borderRadius: TwoBeeRadii.inner,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.alt_route_rounded, color: TwoBeeColors.primary, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${s['pickupAddress']} → ${s['dropoffAddress']}',
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Delivery Security PIN Handover
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: TwoBeeColors.surfaceCard,
+                        borderRadius: TwoBeeRadii.inner,
+                        boxShadow: TwoBeeShadows.softCard,
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1210,10 +1317,10 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('DELIVERY SECURITY PIN', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.7)),
+                              const Text('DELIVERY SECURITY PIN', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.7)),
                               Text(
                                 isRecipient ? 'Share with courier upon delivery' : 'Recipient provides to courier',
-                                style: const TextStyle(fontSize: 10, color: TwoBeeColors.textSecondary),
+                                style: const TextStyle(fontSize: 10, color: TwoBeeColors.textSecondary, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
@@ -1221,116 +1328,228 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 16),
+
+                    // Transit Milestones (Ref 2 Progress Steps)
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: TwoBeeColors.obsidianCard,
+                        borderRadius: TwoBeeRadii.inner,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('TRANSIT MILESTONES', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 0.7, color: TwoBeeColors.primarySoft)),
+                          const SizedBox(height: 8),
+                          _milestoneRow('1. Booked & Dispatched', true),
+                          _milestoneRow('2. Dedicated Courier Assigned', ['RIDER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'].contains(s['status'])),
+                          _milestoneRow('3. Picked Up & In Direct Transit', ['PICKED_UP', 'IN_TRANSIT', 'DELIVERED'].contains(s['status'])),
+                          _milestoneRow('4. Delivered via 4-Digit PIN Handover', s['status'] == 'DELIVERED'),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 14),
 
-                    // Transit Milestones
-                    const Text('TRANSIT MILESTONES (DIRECT P2P)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 0.7, color: TwoBeeColors.textSecondary)),
-                    const SizedBox(height: 6),
-                    _milestoneRow('1. Booked & Dispatched', true),
-                    _milestoneRow('2. Dedicated Courier Assigned', ['RIDER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'].contains(s['status'])),
-                    _milestoneRow('3. Picked Up & In Direct Transit', ['PICKED_UP', 'IN_TRANSIT', 'DELIVERED'].contains(s['status'])),
-                    _milestoneRow('4. Delivered via 4-Digit PIN Handover', s['status'] == 'DELIVERED'),
+                    // Courier Card (Ref 1 & 2 Profile Bar with Call/Chat)
+                    if (courier != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: TwoBeeColors.obsidianCard,
+                          borderRadius: TwoBeeRadii.inner,
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: TwoBeeColors.primary.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: TwoBeeColors.primary),
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.two_wheeler_rounded, color: TwoBeeColors.primary, size: 24),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${courier['name']} · ★${courier['rating']}',
+                                    style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 14),
+                                  ),
+                                  Text(
+                                    '${courier['vehicle'] ?? "EV Moped"} · ${courier['plateNo'] ?? "DHK-HA-8821"}',
+                                    style: const TextStyle(color: Colors.white60, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    icon: const Icon(Icons.phone_rounded, color: Colors.white, size: 18),
+                                    onPressed: () {
+                                      showAutoDismissToast(context, 'Calling courier ${courier['name']}...');
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: TwoBeeColors.primary,
+                                    shape: BoxShape.circle,
+                                    boxShadow: TwoBeeShadows.emeraldGlow,
+                                  ),
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    icon: const Icon(Icons.chat_bubble_rounded, color: TwoBeeColors.textPrimary, size: 18),
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => InAppChatScreen(
+                                          serviceType: 'PARCEL',
+                                          orderId: widget.parcelId,
+                                          peerTitle: courier['name'] as String,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    // Shipment Details Card
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: TwoBeeColors.obsidianCard,
+                        borderRadius: TwoBeeRadii.inner,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Package: ${s['category']} (${s['weightKg']} kg)',
+                                style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 13),
+                              ),
+                              Text(
+                                bdt(s['deliveryChargeBdt'] as num),
+                                style: const TextStyle(fontWeight: FontWeight.w900, color: TwoBeeColors.primary, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text('Payment Method: ${s['paymentMethod']}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                          if ((s['codCollectBdt'] as num) > 0)
+                            Text(
+                              'COD Goods Value: ${bdt(s['codCollectBdt'] as num)}',
+                              style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.amber),
+                            ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                                  ),
+                                  onPressed: () => _showWaybillDialog(s),
+                                  icon: const Icon(Icons.description_outlined, size: 16),
+                                  label: const Text('Waybill'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                                  ),
+                                  onPressed: () {
+                                    showAutoDismissToast(context, 'Tracking link copied: https://2bee.app/track/${s['trackingCode']}');
+                                  },
+                                  icon: const Icon(Icons.share_outlined, size: 16),
+                                  label: const Text('Share Link'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    if (['BOOKED', 'MATCHING', 'RIDER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'].contains(s['status'])) ...[
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: TwoBeeColors.primary,
+                          foregroundColor: TwoBeeColors.textPrimary,
+                          minimumSize: const Size.fromHeight(50),
+                          shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
+                        ),
+                        onPressed: _advanceDemo,
+                        icon: const Icon(Icons.fast_forward_rounded, size: 18),
+                        label: const Text('Preview: Advance Next Parcel Stage ->', style: TextStyle(fontWeight: FontWeight.w900)),
+                      ),
+                    ],
+                    if (['BOOKED', 'MATCHING', 'RIDER_ASSIGNED'].contains(s['status'])) ...[
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: TwoBeeColors.errorText,
+                          side: const BorderSide(color: TwoBeeColors.errorText),
+                        ),
+                        onPressed: _confirmCancel,
+                        child: const Text('Cancel Shipment & Refund'),
+                      ),
+                    ],
+                    if (s['status'] == 'DELIVERED') ...[
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: TwoBeeColors.primary,
+                          foregroundColor: TwoBeeColors.textPrimary,
+                          minimumSize: const Size.fromHeight(52),
+                          shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
+                        ),
+                        onPressed: _rateParcel,
+                        child: Text(
+                          s['rating'] == null ? 'Rate Courier & View Receipt ->' : 'View Delivery Receipt & Rating',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-
-            // Courier Card (if assigned)
-            if (courier != null) ...[
-              Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: TwoBeeColors.borderSoft)),
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: TwoBeeColors.surfaceTonal,
-                    child: Icon(Icons.electric_moped_rounded, color: TwoBeeColors.primary),
-                  ),
-                  title: Text('${courier['name']} · ★${courier['rating']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('${courier['vehicle'] ?? "Glafit GFR-02"} · ${courier['plateNo'] ?? "DHK-HA-8821"}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.chat_outlined, color: TwoBeeColors.primary),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => InAppChatScreen(
-                          serviceType: 'PARCEL',
-                          orderId: widget.parcelId,
-                          peerTitle: courier['name'] as String,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-
-            // Shipment Details Card
-            Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: TwoBeeColors.borderSoft)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Package: ${s['category']} (${s['weightKg']} kg)', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 4),
-                    Text('Delivery Fee: ${bdt(s['deliveryChargeBdt'] as num)} (${s['paymentMethod']})'),
-                    if ((s['codCollectBdt'] as num) > 0)
-                      Text(
-                        'COD Goods Value: ${bdt(s['codCollectBdt'] as num)}',
-                        style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.deepOrange),
-                      ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _showWaybillDialog(s),
-                            icon: const Icon(Icons.description_outlined, size: 18),
-                            label: const Text('Waybill'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              showAutoDismissToast(context, 'Tracking link copied: https://2bee.app/track/${s['trackingCode']}');
-                            },
-                            icon: const Icon(Icons.share_outlined, size: 18),
-                            label: const Text('Share Link'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            if (['BOOKED', 'MATCHING', 'RIDER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'].contains(s['status'])) ...[
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: TwoBeeColors.obsidian),
-                onPressed: _advanceDemo,
-                icon: const Icon(Icons.fast_forward_rounded),
-                label: const Text('Preview: Simulate Next Parcel Stage ->'),
-              ),
-            ],
-            if (['BOOKED', 'MATCHING', 'RIDER_ASSIGNED'].contains(s['status'])) ...[
-              const SizedBox(height: 10),
-              OutlinedButton(
-                onPressed: _confirmCancel,
-                child: const Text('Cancel Shipment & Refund'),
-              ),
-            ],
-            if (s['status'] == 'DELIVERED') ...[
-              const SizedBox(height: 14),
-              ElevatedButton(
-                onPressed: _rateParcel,
-                child: Text(s['rating'] == null ? 'Rate Courier & View Receipt ->' : 'View Delivery Receipt & Rating'),
-              ),
-            ],
           ],
         ),
       ),
@@ -1345,7 +1564,7 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
           Icon(
             isDone ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
             size: 16,
-            color: isDone ? TwoBeeColors.primary : TwoBeeColors.textSecondary,
+            color: isDone ? TwoBeeColors.primary : Colors.white54,
           ),
           const SizedBox(width: 8),
           Text(
@@ -1353,7 +1572,7 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: isDone ? FontWeight.w700 : FontWeight.w500,
-              color: isDone ? TwoBeeColors.textPrimary : TwoBeeColors.textSecondary,
+              color: isDone ? Colors.white : TwoBeeColors.textOnDarkSecondary,
             ),
           ),
         ],
@@ -1492,6 +1711,429 @@ class _ParcelDeliveredRatingScreenState extends ConsumerState<ParcelDeliveredRat
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Dedicated Receiver Parcel Tracking Screen
+class ReceiverParcelTrackingScreen extends ConsumerStatefulWidget {
+  final String parcelId;
+  final bool isDeliveredHistory;
+  const ReceiverParcelTrackingScreen({super.key, required this.parcelId, this.isDeliveredHistory = false});
+
+  @override
+  ConsumerState<ReceiverParcelTrackingScreen> createState() => _ReceiverParcelTrackingScreenState();
+}
+
+class _ReceiverParcelTrackingScreenState extends ConsumerState<ReceiverParcelTrackingScreen> {
+  Map<String, dynamic>? _shipment;
+  bool _loading = true;
+  bool _isDelivered = false;
+  int _ratingStars = 5;
+  final _commentCtrl = TextEditingController();
+  bool _submittingRating = false;
+  bool _rated = false;
+
+  static final Map<String, dynamic> _fallbackReceiverParcel = {
+    'id': 'mock-sample-active',
+    'trackingCode': '2B-P8821',
+    'status': 'IN_TRANSIT',
+    'statusBanner': 'In Direct Transit · ~8 mins away',
+    'deliveryPin': '8821',
+    'senderName': 'Apple Authorized Banani Hub',
+    'pickupAddress': 'Road 11, Banani, Dhaka',
+    'dropoffAddress': 'House 14, Road 4, Sector 3, Uttara',
+    'category': 'Electronics (Mac Mini M4 Pro)',
+    'weightKg': 2.4,
+    'paymentMethod': 'ONLINE_PAID',
+    'codGoodsValueBdt': 0,
+    'courier': {
+      'name': 'Richard Dheo',
+      'phone': '+8801719998888',
+      'rating': 4.94,
+      'vehicleBrandModel': 'Glafit GFR-02 EV Bike',
+      'plateNo': '2BEE-EV-04',
+      'lat': 23.8200,
+      'lng': 90.4100,
+    },
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    final sock = ref.read(socketServiceProvider);
+    sock.joinTracking('parcel', widget.parcelId);
+    sock.socket?.on('parcel:status', (_) => _load());
+    sock.socket?.on('parcel:delivered', (_) {
+      if (mounted) {
+        setState(() => _isDelivered = true);
+        showAutoDismissToast(context, '🎉 Parcel #${_shipment?['trackingCode'] ?? ''} Received Successfully!', duration: const Duration(seconds: 4));
+      }
+    });
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await ref.read(apiClientProvider).get('/parcels/${widget.parcelId}');
+      if (mounted) {
+        setState(() {
+          _shipment = Map<String, dynamic>.from(res['shipment'] as Map);
+          if (widget.isDeliveredHistory || _shipment!['status'] == 'DELIVERED') {
+            _isDelivered = true;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _shipment = Map<String, dynamic>.from(_fallbackReceiverParcel);
+          if (widget.isDeliveredHistory) {
+            _shipment!['status'] = 'DELIVERED';
+            _shipment!['statusBanner'] = 'Delivered & Handed Over';
+            _isDelivered = true;
+          }
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _simulateRiderVerifyPin() async {
+    try {
+      await ref.read(apiClientProvider).post('/common/demo/advance-parcel/${widget.parcelId}');
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _isDelivered = true;
+        _shipment = Map<String, dynamic>.from(_shipment ?? _fallbackReceiverParcel)
+          ..['status'] = 'DELIVERED'
+          ..['statusBanner'] = 'Delivered & Handover Confirmed';
+      });
+      showAutoDismissToast(
+        context,
+        '🎉 Parcel #${_shipment!['trackingCode']} has been received! PIN verified by rider.',
+        duration: const Duration(seconds: 4),
+      );
+    }
+  }
+
+  Future<void> _submitRating() async {
+    setState(() => _submittingRating = true);
+    try {
+      await ref.read(apiClientProvider).post('/parcels/${widget.parcelId}/rate', body: {
+        'rating': _ratingStars,
+        'comment': _commentCtrl.text.trim(),
+      });
+    } catch (_) {}
+    if (mounted) {
+      setState(() {
+        _submittingRating = false;
+        _rated = true;
+      });
+      showAutoDismissToast(context, 'Thank you! Rating submitted.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading && _shipment == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final s = _shipment ?? _fallbackReceiverParcel;
+    final courier = (s['courier'] as Map?) ?? _fallbackReceiverParcel['courier'] as Map;
+    final pin = (s['deliveryPin']?.toString() ?? '8821');
+
+    return Scaffold(
+      backgroundColor: TwoBeeColors.scaffoldBg,
+      appBar: AppBar(
+        title: const Text('Incoming Parcel · Receiver View'),
+        actions: const [TwoBeeHomeAction()],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Live map showing where parcel is
+            TwoBeeMapPreview(
+              pickupLat: 23.7937,
+              pickupLng: 90.4066,
+              dropoffLat: 23.8690,
+              dropoffLng: 90.3980,
+              riderLat: (courier['lat'] as num?)?.toDouble() ?? 23.8200,
+              riderLng: (courier['lng'] as num?)?.toDouble() ?? 90.4100,
+              height: 220,
+            ),
+            const SizedBox(height: 14),
+
+            // Receiver Live Status Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: TwoBeeColors.obsidian,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: TwoBeeShadows.dockNav,
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: _isDelivered ? TwoBeeColors.primary : TwoBeeColors.obsidianCard,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: TwoBeeColors.primary, width: 2),
+                    ),
+                    child: Icon(
+                      _isDelivered ? Icons.check_circle_rounded : Icons.local_shipping_rounded,
+                      color: _isDelivered ? TwoBeeColors.obsidian : TwoBeeColors.primary,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _isDelivered ? 'PARCEL DELIVERED' : 'INCOMING PARCEL',
+                          style: const TextStyle(fontWeight: FontWeight.w900, color: TwoBeeColors.primarySoft, fontSize: 11, letterSpacing: 0.6),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          s['statusBanner']?.toString() ?? (_isDelivered ? 'Delivered & Handed Over' : 'Courier En-Route to Your Doorstep'),
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Colors.white),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Tracking ID: #${s['trackingCode']}',
+                          style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'monospace'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // PIN Card or Delivered Celebration
+            if (!_isDelivered) ...[
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: TwoBeeColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: TwoBeeColors.primary, width: 2),
+                  boxShadow: TwoBeeShadows.softCard,
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.lock_open_rounded, color: TwoBeeColors.primary, size: 20),
+                            SizedBox(width: 8),
+                            Text('YOUR DELIVERY PIN', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.8)),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: TwoBeeColors.surfaceTonal,
+                            borderRadius: TwoBeeRadii.pill,
+                          ),
+                          child: const Text('Share with Rider', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: TwoBeeColors.primaryAccent)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        for (int i = 0; i < 4; i++)
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 6),
+                            width: 52,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: TwoBeeColors.surfaceTonal,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: TwoBeeColors.primary, width: 2),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              pin.length > i ? pin[i] : '•',
+                              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: TwoBeeColors.textPrimary, fontFamily: 'monospace'),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Give this 4-digit PIN to the delivery rider upon arrival. When the rider submits this PIN, the parcel will automatically mark as delivered.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11, color: TwoBeeColors.textSecondary, height: 1.4),
+                    ),
+                    const SizedBox(height: 14),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: TwoBeeColors.primary,
+                        foregroundColor: TwoBeeColors.obsidian,
+                        shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
+                        minimumSize: const Size.fromHeight(44),
+                      ),
+                      onPressed: _simulateRiderVerifyPin,
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text('Preview: Rider Submits PIN & Hands Over ➔', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: TwoBeeColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: TwoBeeColors.primary, width: 2),
+                  boxShadow: TwoBeeShadows.softCard,
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: TwoBeeColors.primary,
+                        shape: BoxShape.circle,
+                        boxShadow: TwoBeeShadows.emeraldGlow,
+                      ),
+                      child: const Icon(Icons.done_all_rounded, color: TwoBeeColors.obsidian, size: 32),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Parcel Received Successfully! 🎉', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 4),
+                    Text('Handover confirmed with PIN $pin', style: const TextStyle(color: TwoBeeColors.textSecondary, fontSize: 12)),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: TwoBeeColors.surfaceTonal,
+                        borderRadius: TwoBeeRadii.pill,
+                      ),
+                      child: const Text('🌱 142g CO2 Saved via 100% Glafit Electric Delivery', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TwoBeeColors.primaryAccent)),
+                    ),
+                    const SizedBox(height: 16),
+                    if (!_rated) ...[
+                      const Text('Rate Delivery Rider:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(5, (index) => IconButton(
+                          icon: Icon(
+                            index < _ratingStars ? Icons.star_rounded : Icons.star_outline_rounded,
+                            color: Colors.amber,
+                            size: 28,
+                          ),
+                          onPressed: () => setState(() => _ratingStars = index + 1),
+                        )),
+                      ),
+                      TextField(
+                        controller: _commentCtrl,
+                        decoration: const InputDecoration(
+                          hintText: 'Share feedback (e.g. on time, friendly courier)...',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: TwoBeeColors.obsidian,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
+                          minimumSize: const Size.fromHeight(42),
+                        ),
+                        onPressed: _submittingRating ? null : _submitRating,
+                        child: Text(_submittingRating ? 'Submitting...' : 'Submit Rating & Feedback'),
+                      ),
+                    ] else ...[
+                      const Text('✓ Rating submitted! Added to your received history.', style: TextStyle(color: TwoBeeColors.primaryAccent, fontWeight: FontWeight.w800, fontSize: 12)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+
+            // Courier Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: TwoBeeColors.surfaceCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: TwoBeeColors.borderSoft),
+              ),
+              child: Row(
+                children: [
+                  const CircleAvatar(
+                    backgroundColor: TwoBeeColors.surfaceTonal,
+                    child: Icon(Icons.two_wheeler_rounded, color: TwoBeeColors.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${courier['name']} · ★${courier['rating'] ?? 4.9}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                        const SizedBox(height: 2),
+                        Text('${courier['vehicleBrandModel']} · ${courier['plateNo']}', style: const TextStyle(fontSize: 11, color: TwoBeeColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.phone_outlined, color: TwoBeeColors.primary),
+                    onPressed: () => showAutoDismissToast(context, 'Calling ${courier['name']}...'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Package Details Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: TwoBeeColors.surfaceCard,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: TwoBeeColors.borderSoft),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('PACKAGE DETAILS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: TwoBeeColors.textSecondary, letterSpacing: 0.6)),
+                  const SizedBox(height: 8),
+                  Text('From: ${s['senderName']} (${s['pickupAddress']})', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text('Item: ${s['category']} · Weight: ${s['weightKg']} kg', style: const TextStyle(fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text('Deliver To: ${s['dropoffAddress']}', style: const TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Payment: ${s['paymentMethod']} · ${((s['codGoodsValueBdt'] as num?) ?? 0) > 0 ? "Collect ৳${s['codGoodsValueBdt']}" : "Paid Online"}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TwoBeeColors.primaryAccent),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

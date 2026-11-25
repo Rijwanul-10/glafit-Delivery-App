@@ -93,6 +93,12 @@ class AuthSessionState {
 
   bool get isLoggedIn => accessToken != null && accessToken!.isNotEmpty;
 
+  bool get needsProfileSetup {
+    if (!isLoggedIn) return false;
+    final name = (user?['fullName'] as String?)?.trim() ?? '';
+    return name.isEmpty || name == '2Bee Customer' || name == '2Bee User';
+  }
+
   String get activeRole => (user?['activeRole'] as String?) ?? 'CLIENT';
 
   AuthSessionState copyWith({
@@ -191,7 +197,11 @@ class ApiClient {
       final code = (data['code'] as String?) ?? 'API_ERROR';
       final msg = (data['message'] as String?) ?? 'Request failed';
       if (code == 'ROLE_INACTIVITY_LOCKED' || code == 'ROLE_LOCKED') {
-        ref.read(authControllerProvider.notifier).markRoleLocked();
+        final authState = ref.read(authControllerProvider);
+        final curToken = authState.merchantRoleToken ?? authState.riderRoleToken;
+        if (curToken == null || !curToken.startsWith('demo-')) {
+          ref.read(authControllerProvider.notifier).markRoleLocked();
+        }
       }
       return ApiException(code, msg, statusCode: e.response?.statusCode);
     }
@@ -230,6 +240,7 @@ class AuthController extends StateNotifier<AuthSessionState> {
         // Keep session recoverable on transient offline startup
       }
     }
+
     state = state.copyWith(initialized: true);
   }
 
@@ -253,6 +264,22 @@ class AuthController extends StateNotifier<AuthSessionState> {
     final sock = ref.read(socketServiceProvider);
     sock.connect(token);
     sock.joinUser(data['user']['id'] as String);
+  }
+
+  Future<void> completeUserProfile({required String fullName, String? email}) async {
+    final cleanEmail = email?.trim();
+    final res = await ref.read(apiClientProvider).post(
+      '/auth/profile/complete',
+      body: {
+        'fullName': fullName.trim(),
+        if (cleanEmail != null && cleanEmail.isNotEmpty) 'email': cleanEmail,
+      },
+    );
+    state = state.copyWith(
+      user: Map<String, dynamic>.from(res['user'] as Map),
+      roles: Map<String, dynamic>.from(res['roles'] as Map),
+      lastActivityAt: DateTime.now(),
+    );
   }
 
   Future<void> refreshRoles() async {

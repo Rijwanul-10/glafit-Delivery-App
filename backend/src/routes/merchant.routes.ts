@@ -521,6 +521,23 @@ panel.post(
   }),
 );
 
+panel.post(
+  '/orders/:id/handover',
+  asyncHandler(async (req, res) => {
+    const mp = await assertApprovedMerchant(req.roleSession!.profileId);
+    const prisma = getPrisma();
+    const order = await prisma.foodOrder.findUnique({ where: { id: String(req.params.id) } });
+    if (!order || order.merchantId !== mp.id) throw new HttpError(404, 'ORDER_NOT_FOUND', 'Order not found');
+
+    const updated = await prisma.foodOrder.update({
+      where: { id: order.id },
+      data: { status: 'PICKED_UP' },
+    });
+    getIO()?.to(`tracking:food:${order.id}`).emit('order:status', { orderId: order.id, status: 'PICKED_UP' });
+    res.json({ ok: true, order: updated });
+  }),
+);
+
 // === MENU CRUD ===
 panel.get(
   '/menu',

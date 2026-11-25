@@ -89,8 +89,64 @@ export const mapsService = {
       { displayName: 'Motijheel Commercial Area, Dhaka', lat: 23.7330, lng: 90.4172 },
     ];
     const localHits = dhakaPresets.filter((p) => p.displayName.toLowerCase().includes(q));
-    if (localHits.length > 0 || env.nodeEnv === 'test' || process.env.DISABLE_EXTERNAL_HTTP === 'true') {
+    if (env.nodeEnv === 'test' || process.env.DISABLE_EXTERNAL_HTTP === 'true') {
       return localHits.length > 0 ? localHits : dhakaPresets.slice(0, 4);
+    }
+
+    // Optional Bangladesh Barikoi Places autocomplete
+    if (env.mapsProvider === 'barikoi' && env.barikoiApiKey && q.length >= 2) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 2500);
+        const res = await fetch(
+          `https://barikoi.xyz/v2/api/search/autocomplete/place?api_key=${encodeURIComponent(env.barikoiApiKey)}&q=${encodeURIComponent(query)}&city=dhaka`,
+          { signal: controller.signal },
+        );
+        clearTimeout(timer);
+        if (res.ok) {
+          const data = (await res.json()) as { places?: Array<{ address: string; latitude: string; longitude: string }> };
+          if (data.places?.length) {
+            return data.places.map((p) => ({
+              displayName: p.address,
+              lat: Number(p.latitude),
+              lng: Number(p.longitude),
+            }));
+          }
+        }
+      } catch {
+        // fallback to Nominatim / local
+      }
+    }
+
+    // Optional Google Places Geocode
+    if (env.mapsProvider === 'google' && env.googleMapsServerApiKey && q.length >= 2) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 2500);
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&components=country:BD&key=${encodeURIComponent(env.googleMapsServerApiKey)}`,
+          { signal: controller.signal },
+        );
+        clearTimeout(timer);
+        if (res.ok) {
+          const data = (await res.json()) as {
+            results?: Array<{ formatted_address: string; geometry: { location: { lat: number; lng: number } } }>;
+          };
+          if (data.results?.length) {
+            return data.results.slice(0, 5).map((r) => ({
+              displayName: r.formatted_address,
+              lat: r.geometry.location.lat,
+              lng: r.geometry.location.lng,
+            }));
+          }
+        }
+      } catch {
+        // fallback to Nominatim / local
+      }
+    }
+
+    if (localHits.length > 0) {
+      return localHits;
     }
     try {
       const controller = new AbortController();

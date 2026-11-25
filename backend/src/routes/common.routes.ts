@@ -1,6 +1,4 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { getPrisma } from '../lib/prisma.js';
@@ -8,6 +6,8 @@ import { asyncHandler, HttpError } from '../middleware/errorHandler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { mapsService } from '../services/mapsService.js';
 import { paymentService } from '../services/paymentService.js';
+import { storageService } from '../services/storageService.js';
+import { firebaseService } from '../services/firebaseService.js';
 import { getIO } from '../realtime/socketServer.js';
 import { env } from '../config/env.js';
 
@@ -26,24 +26,37 @@ commonRouter.get(
   }),
 );
 
+/**
+ * POST /api/v1/common/payments/stripe/webhook
+ * Verifies Stripe webhook signatures when STRIPE_WEBHOOK_SECRET is configured.
+ */
+commonRouter.post(
+  '/payments/stripe/webhook',
+  asyncHandler(async (req, res) => {
+    const rawBody = (req as Request & { rawBody?: Buffer }).rawBody ?? JSON.stringify(req.body);
+    const sig = req.headers['stripe-signature'] as string | undefined;
+    const event = paymentService.verifyWebhookEvent(rawBody, sig);
+    const payload = event ?? (req.body as { type?: string; data?: { object?: { id?: string } } });
+
+    if (payload?.type === 'payment_intent.succeeded' && payload.data?.object?.id) {
+      const intentId = payload.data.object.id;
+      const prisma = getPrisma();
+      await Promise.all([
+        prisma.foodOrder.updateMany({ where: { stripeIntentId: intentId }, data: { paymentStatus: 'PAID' } }),
+        prisma.rideTrip.updateMany({ where: { stripeIntentId: intentId }, data: { paymentStatus: 'PAID' } }),
+        prisma.parcelShipment.updateMany({ where: { stripeIntentId: intentId }, data: { paymentStatus: 'PAID' } }),
+      ]);
+    }
+    res.json({ received: true });
+  }),
+);
+
 // Protected common endpoints
 const protectedCommon = Router();
 protectedCommon.use(requireAuth);
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    const dir = path.resolve(process.cwd(), env.localUploadDir);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (_req, file, cb) => {
-    const safeExt = path.extname(file.originalname || '.jpg').replace(/[^a-zA-Z0-9.]/g, '') || '.jpg';
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${safeExt}`);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
 });
 
@@ -54,12 +67,52 @@ protectedCommon.post(
     if (!req.file) {
       throw new HttpError(400, 'NO_FILE', 'Upload field "file" is required');
     }
+    const isPrivate = req.query.visibility === 'private' || req.body?.visibility === 'private';
+    const stored = await storageService.uploadFile({
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      folder: isPrivate ? 'private/kyc' : 'public',
+      isPrivate,
+    });
     res.status(201).json({
       ok: true,
-      url: `/uploads/${req.file.filename}`,
+      url: stored.url,
+      key: stored.key,
+      storageProvider: stored.provider,
       originalName: req.file.originalname,
       sizeBytes: req.file.size,
     });
+  }),
+);
+
+protectedCommon.post(
+  '/fcm-token',
+  asyncHandler(async (req, res) => {
+    const schema = z.object({
+      token: z.string().min(10),
+      role: z.enum(['CLIENT', 'RIDER', 'MERCHANT']).default('CLIENT'),
+      platform: z.enum(['ANDROID', 'IOS', 'WEB']).default('ANDROID'),
+    });
+    const parsed = schema.parse(req.body);
+    const saved = await firebaseService.registerPushToken({
+      userId: req.auth!.userId,
+      role: parsed.role,
+      platform: parsed.platform,
+      token: parsed.token,
+    });
+    res.json({ ok: true, id: saved.id });
+  }),
+);
+
+protectedCommon.delete(
+  '/fcm-token',
+  asyncHandler(async (req, res) => {
+    const token = String(req.body?.token ?? req.query.token ?? '');
+    if (token) {
+      await firebaseService.removePushToken(token);
+    }
+    res.json({ ok: true });
   }),
 );
 
@@ -142,6 +195,13 @@ protectedCommon.post(
     const prisma = getPrisma();
     const incident = await prisma.sosIncident.create({
       data: { userId: req.auth!.userId, ...parsed },
+    });
+    getIO()?.to('admin').emit('admin:sos:new', incident);
+    void firebaseService.sendPushToRole('ADMIN', {
+      title: `🚨 SOS Alert (${parsed.role})`,
+      body: parsed.note || `Emergency triggered at ${parsed.lat.toFixed(4)}, ${parsed.lng.toFixed(4)}`,
+      data: { type: 'SOS_ALERT', incidentId: incident.id },
+      channelId: 'admin_sos_urgent',
     });
     res.status(201).json({
       ok: true,

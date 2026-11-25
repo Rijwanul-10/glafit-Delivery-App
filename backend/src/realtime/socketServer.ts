@@ -32,13 +32,20 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
     const token =
       (socket.handshake.auth?.token as string | undefined) ??
       (socket.handshake.query?.token as string | undefined);
+    const adminSecret = socket.handshake.auth?.adminSecret as string | undefined;
+    if (adminSecret && adminSecret === env.adminSeedPassword) {
+      socket.data.isAdmin = true;
+    }
     if (!token) {
       return next(); // Allow guest/public subscription by token check on sensitive rooms if needed
     }
     try {
-      const decoded = jwt.verify(token, env.jwtAccessSecret) as { sub: string; phone: string };
+      const decoded = jwt.verify(token, env.jwtAccessSecret) as { sub: string; phone?: string; role?: string };
       socket.data.userId = decoded.sub;
       socket.data.phone = decoded.phone;
+      if (decoded.role === 'ADMIN') {
+        socket.data.isAdmin = true;
+      }
     } catch {
       // ignore invalid optional token at handshake; rooms enforce identity
     }
@@ -46,6 +53,12 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
   });
 
   io.on('connection', (socket: Socket) => {
+    socket.on('join:admin', () => {
+      if (socket.data.isAdmin === true) {
+        socket.join('admin');
+      }
+    });
+
     socket.on('join:user', (userId: string) => {
       if (typeof userId === 'string' && userId.length > 0) {
         socket.join(`user:${userId}`);

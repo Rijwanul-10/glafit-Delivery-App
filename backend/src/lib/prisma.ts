@@ -11,6 +11,21 @@ let prismaInstance: PrismaClient | null = null;
 let pgliteInstance: PGlite | null = null;
 let pgPool: Pool | null = null;
 
+const DEVICE_PUSH_TOKEN_DDL = `
+  CREATE TABLE IF NOT EXISTS "DevicePushToken" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT,
+    "role" TEXT NOT NULL,
+    "platform" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "DevicePushToken_pkey" PRIMARY KEY ("id")
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS "DevicePushToken_token_key" ON "DevicePushToken"("token");
+  CREATE INDEX IF NOT EXISTS "DevicePushToken_userId_role_idx" ON "DevicePushToken"("userId", "role");
+`;
+
 function resolveInitSqlPath(): string {
   const candidates = [
     path.resolve(process.cwd(), 'prisma/init.sql'),
@@ -28,7 +43,26 @@ export async function initPrisma(options?: { pglitePath?: string }): Promise<Pri
   }
 
   if (env.dbMode === 'postgres' && !options?.pglitePath) {
-    pgPool = new Pool({ connectionString: env.databaseUrl });
+    pgPool = new Pool({
+      connectionString: env.databaseUrl,
+      ssl:
+        env.databaseUrl.includes('localhost') || env.databaseUrl.includes('127.0.0.1')
+          ? undefined
+          : { rejectUnauthorized: false },
+    });
+    const existing = await pgPool.query<{ tbl: string | null }>(`SELECT to_regclass('public."User"') AS tbl`);
+    if (!existing.rows[0]?.tbl) {
+      const sql = fs.readFileSync(resolveInitSqlPath(), 'utf8');
+      await pgPool.query(sql);
+      console.info('[2Bee Postgres] Bootstrapped initial schema from prisma/init.sql');
+    } else {
+      const pushTbl = await pgPool.query<{ tbl: string | null }>(
+        `SELECT to_regclass('public."DevicePushToken"') AS tbl`,
+      );
+      if (!pushTbl.rows[0]?.tbl) {
+        await pgPool.query(DEVICE_PUSH_TOKEN_DDL);
+      }
+    }
     const adapter = new PrismaPg(pgPool);
     prismaInstance = new PrismaClient({ adapter });
     await prismaInstance.$connect();
@@ -46,6 +80,13 @@ export async function initPrisma(options?: { pglitePath?: string }): Promise<Pri
   if (!existing.rows[0]?.tbl) {
     const sql = fs.readFileSync(resolveInitSqlPath(), 'utf8');
     await pgliteInstance.exec(sql);
+  } else {
+    const pushTbl = await pgliteInstance.query<{ tbl: string | null }>(
+      `SELECT to_regclass('public."DevicePushToken"') AS tbl`,
+    );
+    if (!pushTbl.rows[0]?.tbl) {
+      await pgliteInstance.exec(DEVICE_PUSH_TOKEN_DDL);
+    }
   }
 
   const adapter = new PrismaPGlite(pgliteInstance);
@@ -75,4 +116,3 @@ export async function closePrisma(): Promise<void> {
     pgliteInstance = null;
   }
 }
-

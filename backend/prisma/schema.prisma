@@ -700,3 +700,15 @@ model AppPricingConfig {
   updatedAt             DateTime @updatedAt
 }
 
+model DevicePushToken {
+  id        String   @id @default(cuid())
+  userId    String?
+  role      String   // CLIENT | RIDER | MERCHANT | ADMIN
+  platform  String   // ANDROID | IOS | WEB
+  token     String   @unique
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@index([userId, role])
+}
+

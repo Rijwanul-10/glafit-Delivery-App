@@ -8,6 +8,7 @@ import { resolveZoneByCoords } from '../services/zoneService.js';
 import { paymentService } from '../services/paymentService.js';
 import { geoMatchService } from '../services/geoMatchService.js';
 import { getIO } from '../realtime/socketServer.js';
+import { firebaseService } from '../services/firebaseService.js';
 import { generateReceiptPdf } from '../services/pdfService.js';
 
 export const parcelRouter = Router();
@@ -212,6 +213,26 @@ parcelRouter.post(
         payoutBdt: shipment.riderPayoutBdt,
         countdownSeconds: 15,
       });
+    }
+    if (nearbyRiders.length > 0) {
+      void prisma.riderProfile
+        .findMany({ where: { id: { in: nearbyRiders.map((h) => h.riderId) } }, select: { userId: true } })
+        .then((rows) =>
+          Promise.all(
+            rows.map((r) =>
+              firebaseService.sendPushToUser(
+                r.userId,
+                {
+                  title: `New Parcel Offer (${shipment.trackingCode})`,
+                  body: `${shipment.pickupAddress} → ${shipment.dropoffAddress} · ৳${shipment.riderPayoutBdt}`,
+                  data: { type: 'PARCEL_OFFER', parcelId: shipment.id },
+                  channelId: 'rider_offers_urgent',
+                },
+                'RIDER',
+              ),
+            ),
+          ),
+        );
     }
 
     res.status(201).json({

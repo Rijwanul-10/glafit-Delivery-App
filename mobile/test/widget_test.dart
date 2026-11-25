@@ -178,4 +178,16 @@ void main() {
 
     expect(find.textContaining('Enter Tracking Code'), findsOneWidget);
   });
+
+  testWidgets('CompleteUserProfileScreen renders short user profile setup fields', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(theme: TwoBeeTheme.light(), home: const CompleteUserProfileScreen()),
+      ),
+    );
+    expect(find.text('Complete Your Profile'), findsOneWidget);
+    expect(find.text('Full Name *'), findsOneWidget);
+    expect(find.text('Email Address (Optional)'), findsOneWidget);
+    expect(find.textContaining('Save Profile & Continue'), findsOneWidget);
+  });
 }

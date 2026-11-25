@@ -21,8 +21,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/splash';
       }
       if (auth.initialized && !auth.isLoggedIn) {
-        final needsAuth = loc == '/roles' || loc == '/client' || loc.startsWith('/merchant') || loc.startsWith('/rider');
+        final needsAuth = loc == '/register-profile' || loc == '/roles' || loc == '/client' || loc.startsWith('/merchant') || loc.startsWith('/rider');
         if (needsAuth) return '/login';
+      }
+      if (auth.initialized && auth.isLoggedIn && auth.needsProfileSetup) {
+        final blockedUntilProfile = loc == '/roles' || loc == '/client' || loc.startsWith('/merchant') || loc.startsWith('/rider');
+        if (blockedUntilProfile) return '/register-profile';
       }
       return null;
     },
@@ -37,9 +41,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           return OtpVerificationScreen(
             phone: extra['phone']?.toString() ?? '',
             devHint: extra['devHint']?.toString(),
+            isNewUser: extra['isNewUser'] == true,
           );
         },
       ),
+      GoRoute(path: '/register-profile', builder: (_, _) => const CompleteUserProfileScreen()),
       GoRoute(path: '/roles', builder: (_, _) => const RoleSelectionScreen()),
       GoRoute(path: '/screens', builder: (_, _) => const AllScreensExplorerScreen()),
 

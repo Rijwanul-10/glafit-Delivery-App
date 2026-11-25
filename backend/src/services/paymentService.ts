@@ -38,6 +38,7 @@ export const paymentService = {
           code: 'STRIPE_SANDBOX',
           label: 'Online Payment (Stripe Sandbox Card)',
           functional: true,
+          publishableKey: env.stripePublishableKey || null,
           testCardHint: '4242 4242 4242 4242 · Exp 12/30 · CVC 424',
         },
       ],
@@ -120,6 +121,13 @@ export const paymentService = {
       paid: paymentIntentId.startsWith('pi_'),
       trxId: `TRX-2B-${paymentIntentId.slice(-6).toUpperCase()}`,
     };
+  },
+
+  verifyWebhookEvent(rawBody: Buffer | string, signature?: string) {
+    if (!stripeClient || !env.stripeWebhookSecret || !signature) {
+      return null;
+    }
+    return stripeClient.webhooks.constructEvent(rawBody, signature, env.stripeWebhookSecret);
   },
 };
 

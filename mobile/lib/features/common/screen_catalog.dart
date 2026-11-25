@@ -187,6 +187,33 @@ class _AllScreensExplorerScreenState extends ConsumerState<AllScreensExplorerScr
                   ('Parcel 1–3: Hub, Specs & Pay Wizard', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ParcelHubScreen()))),
                   ('Parcel Delivered Rating & Receipt (Preview)', () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParcelDeliveredRatingScreen(shipment: _sampleParcel)))),
                   ('Ride 1: Map Radar & Location Selector', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RideLocationScreen()))),
+                  ('Ride 2: Choose EV Bike Tier (Preview)', () => Navigator.push(context, MaterialPageRoute(builder: (_) => RideTierScreen(
+                        pickup: const {'name': 'Banani Road 11', 'lat': 23.7937, 'lng': 90.4066, 'id': 'zone-banani'},
+                        dropoff: const {'name': 'Uttara Sector 3', 'lat': 23.8648, 'lng': 90.3974, 'id': 'zone-uttara'},
+                        estimate: const {
+                          'ok': true,
+                          'distanceKm': 10.4,
+                          'etaMins': 12,
+                          'tiers': [
+                            {
+                              'id': '2BEE_EV_SOLO',
+                              'name': '2Bee EV Solo Bike',
+                              'subtitle': 'Glafit GFR-02 EV · Solo Commute',
+                              'totalFareBdt': 185,
+                              'etaMins': 12,
+                            },
+                            {
+                              'id': '2BEE_EV_EXPRESS',
+                              'name': '2Bee EV Express Bike',
+                              'subtitle': 'Glafit LOM Priority · Instant Dispatch',
+                              'totalFareBdt': 235,
+                              'etaMins': 13,
+                            },
+                          ],
+                        },
+                      )))),
+                  ('Ride 3: Rider Matching Radar (Preview)', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RideMatchingRadarScreen(tripId: 'sample-ride')))),
+                  ('Ride 4: Active Trip & Driver En-Route (Preview)', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RideActiveTripScreen(tripId: 'sample-ride')))),
                   ('Ride 5: Trip Completion & Rating (Preview)', () => Navigator.push(context, MaterialPageRoute(builder: (_) => RideCompletionRatingScreen(trip: _sampleRide)))),
                   ('Edit Client Profile', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditClientProfileScreen()))),
                   ('Saved Addresses', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedAddressesScreen()))),

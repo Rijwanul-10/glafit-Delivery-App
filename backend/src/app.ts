@@ -16,6 +16,8 @@ import { riderRouter } from './routes/rider.routes.js';
 import { adminRouter } from './routes/admin.routes.js';
 import { commonRouter } from './routes/common.routes.js';
 import { geoMatchService } from './services/geoMatchService.js';
+import { firebaseService } from './services/firebaseService.js';
+import { storageService } from './services/storageService.js';
 
 export function createExpressApp() {
   const app = express();
@@ -27,7 +29,14 @@ export function createExpressApp() {
       credentials: true,
     }),
   );
-  app.use(express.json({ limit: '5mb' }));
+  app.use(
+    express.json({
+      limit: '5mb',
+      verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true }));
   if (env.nodeEnv !== 'test') {
     app.use(morgan('dev'));
@@ -41,9 +50,15 @@ export function createExpressApp() {
     res.json({
       ok: true,
       app: env.appName,
+      env: env.nodeEnv,
       dbMode: env.dbMode,
       geoEngine: geoMatchService.getEngineName(),
       paymentMode: env.paymentMode,
+      smsProvider: env.smsProvider,
+      mapsProvider: env.mapsProvider,
+      storageProvider: storageService.getProviderName(),
+      firebaseConfigured: firebaseService.isConfigured(),
+      fcmEnabled: env.fcmEnabled,
       timestamp: new Date().toISOString(),
     });
   });

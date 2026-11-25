@@ -652,6 +652,19 @@ CREATE TABLE "AppPricingConfig" (
     CONSTRAINT "AppPricingConfig_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "DevicePushToken" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT,
+    "role" TEXT NOT NULL,
+    "platform" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "DevicePushToken_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Zone_name_key" ON "Zone"("name");
 
@@ -702,6 +715,12 @@ CREATE UNIQUE INDEX "WalletAccount_userId_role_key" ON "WalletAccount"("userId",
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ChatThread_orderId_key" ON "ChatThread"("orderId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DevicePushToken_token_key" ON "DevicePushToken"("token");
+
+-- CreateIndex
+CREATE INDEX "DevicePushToken_userId_role_idx" ON "DevicePushToken"("userId", "role");
 
 -- AddForeignKey
 ALTER TABLE "RiderProfile" ADD CONSTRAINT "RiderProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -789,4 +808,3 @@ ALTER TABLE "NotificationItem" ADD CONSTRAINT "NotificationItem_userId_fkey" FOR
 
 -- AddForeignKey
 ALTER TABLE "SosIncident" ADD CONSTRAINT "SosIncident_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-

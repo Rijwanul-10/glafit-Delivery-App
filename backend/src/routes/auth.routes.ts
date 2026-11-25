@@ -5,6 +5,7 @@ import { getPrisma } from '../lib/prisma.js';
 import { asyncHandler, HttpError } from '../middleware/errorHandler.js';
 import { requireAuth, signAccessToken, signRefreshToken } from '../middleware/auth.js';
 import { generateOtpCode, hashOtp, smsProvider } from '../services/smsProvider.js';
+import { firebaseService } from '../services/firebaseService.js';
 import { env } from '../config/env.js';
 
 export const authRouter = Router();
@@ -84,6 +85,11 @@ async function buildRoleStateSummary(userId: string) {
   };
 }
 
+function isPlaceholderName(name: string | null | undefined): boolean {
+  const clean = name?.trim() ?? '';
+  return !clean || clean === '2Bee Customer' || clean === '2Bee User';
+}
+
 /**
  * POST /api/v1/auth/otp/request
  * One account per phone (OTP login only; no Google login).
@@ -99,7 +105,11 @@ authRouter.post(
     const phone = normalizeBdPhone(parsed.phone);
     const prisma = getPrisma();
 
-    const code = generateOtpCode();
+    const [code, existingUser] = await Promise.all([
+      Promise.resolve(generateOtpCode()),
+      prisma.user.findUnique({ where: { phone } }),
+    ]);
+
     await prisma.otpChallenge.create({
       data: {
         phone,
@@ -114,6 +124,8 @@ authRouter.post(
       ok: true,
       phone,
       purpose: parsed.purpose,
+      isNewUser: !existingUser,
+      needsProfileSetup: !existingUser || isPlaceholderName(existingUser.fullName),
       expiresInSeconds: 300,
       resendAfterSeconds: 30,
       ...(smsRes.devHint ? { devOtpHint: smsRes.devHint } : {}),
@@ -132,6 +144,7 @@ authRouter.post(
       code: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits'),
       purpose: z.enum(['LOGIN', 'FORGOT_PASSCODE', 'MERCHANT_APPROVAL_PIN', 'PAYOUT_CHANGE']).default('LOGIN'),
       fullName: z.string().optional(),
+      email: z.string().email().optional().or(z.literal('')),
     });
     const parsed = schema.parse(req.body);
     const phone = normalizeBdPhone(parsed.phone);
@@ -165,36 +178,125 @@ authRouter.post(
       data: { consumedAt: new Date() },
     });
 
-    let user = await prisma.user.findUnique({ where: { phone } });
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          phone,
-          fullName: parsed.fullName?.trim() || '2Bee Customer',
-          activeRole: 'CLIENT',
-        },
-      });
-      await prisma.walletAccount.create({
-        data: { userId: user.id, role: 'CLIENT', balanceBdt: 0 },
-      });
-    } else {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { lastActiveAt: new Date() },
-      });
+    const result = await finalizePhoneLogin({
+      phone,
+      fullName: parsed.fullName,
+      email: parsed.email,
+    });
+    res.json(result);
+  }),
+);
+
+async function finalizePhoneLogin(params: { phone: string; fullName?: string; email?: string }) {
+  const prisma = getPrisma();
+  let user = await prisma.user.findUnique({ where: { phone: params.phone } });
+  const isNewUser = !user;
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        phone: params.phone,
+        fullName: params.fullName?.trim() || '2Bee Customer',
+        email: params.email?.trim() || null,
+        activeRole: 'CLIENT',
+      },
+    });
+    await prisma.walletAccount.create({
+      data: { userId: user.id, role: 'CLIENT', balanceBdt: 0 },
+    });
+  } else {
+    const providedName = params.fullName?.trim();
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        ...(providedName && isPlaceholderName(user.fullName) ? { fullName: providedName } : {}),
+        ...(params.email?.trim() ? { email: params.email.trim() } : {}),
+        lastActiveAt: new Date(),
+      },
+    });
+  }
+
+  const summary = await buildRoleStateSummary(user.id);
+  const accessToken = signAccessToken(user.id, user.phone);
+  const refreshToken = signRefreshToken(user.id, user.phone);
+
+  return {
+    ok: true,
+    accessToken,
+    refreshToken,
+    inactivityTimeoutMinutes: env.roleInactivityMinutes,
+    isNewUser,
+    needsProfileSetup: isPlaceholderName(user.fullName),
+    ...summary,
+  };
+}
+
+/**
+ * POST /api/v1/auth/firebase-phone-login
+ * Verifies a Firebase Phone Auth ID token (10k free SMS/mo on Firebase Spark) and issues 2Bee JWTs.
+ */
+authRouter.post(
+  '/firebase-phone-login',
+  asyncHandler(async (req, res) => {
+    const schema = z.object({
+      idToken: z.string().min(20),
+      fullName: z.string().optional(),
+      email: z.string().email().optional().or(z.literal('')),
+    });
+    const parsed = schema.parse(req.body);
+    let decoded;
+    try {
+      decoded = await firebaseService.verifyIdToken(parsed.idToken);
+    } catch (err) {
+      throw new HttpError(401, 'FIREBASE_AUTH_FAILED', (err as Error).message || 'Invalid Firebase ID token');
+    }
+    const rawPhone = decoded.phone_number;
+    if (!rawPhone) {
+      throw new HttpError(400, 'PHONE_REQUIRED', 'Firebase token does not contain a verified phone number');
+    }
+    let phone: string;
+    try {
+      phone = normalizeBdPhone(rawPhone);
+    } catch {
+      // Support international test numbers configured in Firebase Console during TestFlight QA
+      phone = rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`;
     }
 
-    const summary = await buildRoleStateSummary(user.id);
-    const accessToken = signAccessToken(user.id, user.phone);
-    const refreshToken = signRefreshToken(user.id, user.phone);
-
-    res.json({
-      ok: true,
-      accessToken,
-      refreshToken,
-      inactivityTimeoutMinutes: env.roleInactivityMinutes,
-      ...summary,
+    const result = await finalizePhoneLogin({
+      phone,
+      fullName: parsed.fullName,
+      email: parsed.email,
     });
+    res.json(result);
+  }),
+);
+
+/**
+ * POST /api/v1/auth/profile/complete
+ * Short initial registration step saving basic User profile linked to verified phone.
+ */
+authRouter.post(
+  '/profile/complete',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const schema = z.object({
+      fullName: z.string().trim().min(2, 'Enter your full name (at least 2 characters)').max(80),
+      email: z.string().trim().email('Enter a valid email address').optional().or(z.literal('')),
+    });
+    const parsed = schema.parse(req.body);
+    if (isPlaceholderName(parsed.fullName)) {
+      throw new HttpError(400, 'INVALID_NAME', 'Please enter your real name to continue');
+    }
+    const prisma = getPrisma();
+    await prisma.user.update({
+      where: { id: req.auth!.userId },
+      data: {
+        fullName: parsed.fullName,
+        ...(parsed.email !== undefined ? { email: parsed.email || null } : {}),
+        lastActiveAt: new Date(),
+      },
+    });
+    const summary = await buildRoleStateSummary(req.auth!.userId);
+    res.json({ ok: true, needsProfileSetup: false, ...summary });
   }),
 );
 

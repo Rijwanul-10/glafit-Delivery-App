@@ -1,9 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/services/food_order_sync_service.dart';
 import '../../core/theme/twobee_theme.dart';
 import '../../core/widgets/app_bottom_nav.dart';
 import '../../core/widgets/common_widgets.dart';
@@ -40,7 +42,9 @@ class _MerchantHomePendingScreenState
     _autoVerifyTimer = Timer(const Duration(seconds: 3), () async {
       if (!mounted) return;
       try {
-        await ref.read(apiClientProvider).post('/common/demo/auto-verify-merchant');
+        await ref
+            .read(apiClientProvider)
+            .post('/common/demo/auto-verify-merchant');
         await ref.read(authControllerProvider.notifier).refreshRoles();
         if (mounted) context.go('/merchant/post-approval-pin');
       } catch (_) {}
@@ -210,6 +214,76 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
   Map<String, dynamic>? _home;
   bool _loading = true;
 
+  Map<String, dynamic> _getFallbackHome() {
+    final roleMerchant = ref.read(authControllerProvider).roles?['merchant'] as Map?;
+    final isHk = roleMerchant?['merchantType'] == 'HOME_KITCHEN';
+    return {
+      'ok': true,
+      'merchant': {
+        'id': 'demo-merchant-id',
+        'businessName': isHk ? "Rina's Home Kitchen · Mirpur" : "Sultan's Dine · Banani",
+        'merchantType': isHk ? 'HOME_KITCHEN' : 'PHYSICAL',
+        'isStoreOpen': true,
+        'avgPrepMins': isHk ? 35 : 22,
+        'rating': 4.88,
+        'ratingCount': 284,
+      },
+      'stats': {
+        'todayOrders': 24,
+        'todaySalesBdt': 14850,
+        'avgPrepMins': isHk ? 35 : 22,
+        'pendingSettlementBdt': 3200,
+      },
+      'homeKitchenPanel': isHk
+          ? {
+              'dailyOrderLimit': 25,
+              'usedQuota': 18,
+              'remainingQuota': 7,
+              'dailyCutoffTime': '2:00 PM',
+              'availableTonightItems': [
+                {'id': 'hk-item-1', 'name': 'Bhuna Khichuri & Dim Bhaji', 'availableTonight': true},
+                {'id': 'hk-item-2', 'name': 'Shorshe Ilish (1 pc)', 'availableTonight': true},
+                {'id': 'hk-item-3', 'name': 'Patar Gola Firni', 'availableTonight': false},
+              ],
+            }
+          : null,
+      'newOrders': [
+        {
+          'id': 'ord-live-1',
+          'orderCode': '2B-F1042',
+          'status': 'PLACED',
+          'totalBdt': 620,
+          'customerName': 'Tanvir Ahmed',
+          'createdAt': '2m ago',
+          'items': [
+            {'itemName': 'Kacchi Biryani (Full)', 'quantity': 1, 'lineTotalBdt': 480},
+            {'itemName': 'Special Borhani (500ml)', 'quantity': 1, 'lineTotalBdt': 140},
+          ],
+        },
+      ],
+      'activePreparing': [
+        {
+          'id': 'ord-prep-1',
+          'orderCode': '2B-F1039',
+          'status': 'PREPARING',
+          'totalBdt': 950,
+          'customerName': 'Sadia Khanam',
+          'prepRemainingMins': 12,
+        },
+      ],
+      'readyForPickup': [
+        {
+          'id': 'ord-ready-1',
+          'orderCode': '2B-F1035',
+          'status': 'READY_FOR_PICKUP',
+          'totalBdt': 540,
+          'riderName': 'Sabbir Rahman (EV-8821)',
+          'handoverPin': '4821',
+        },
+      ],
+    };
+  }
+
   @override
   void initState() {
     super.initState();
@@ -222,13 +296,23 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
 
   Future<void> _load() async {
     final roleToken = ref.read(authControllerProvider).merchantRoleToken;
-    if (roleToken == null) return;
+    if (roleToken == null) {
+      if (mounted) {
+        setState(() {
+          _home = _getFallbackHome();
+          _loading = false;
+        });
+      }
+      return;
+    }
     setState(() => _loading = true);
     try {
       final res = await ref
           .read(apiClientProvider)
           .get('/merchant/panel/home', roleToken: roleToken);
       setState(() => _home = res);
+    } catch (_) {
+      if (mounted) setState(() => _home = _getFallbackHome());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -251,6 +335,7 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
     if (_loading || _home == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+    final syncState = ref.watch(foodOrderSyncProvider);
     final m = _home!['merchant'] as Map;
     final stats = _home!['stats'] as Map;
     final hk = _home!['homeKitchenPanel'] as Map?;
@@ -359,7 +444,7 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
                           fontSize: 13,
                         ),
                       ),
-                      ...(hk['availableTonightItems'] as List).map(
+                      ...((hk['availableTonightItems'] as List?) ?? []).map(
                         (item) => SwitchListTile(
                           dense: true,
                           contentPadding: EdgeInsets.zero,
@@ -393,7 +478,9 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isHk ? 'Hourly Dispatch Activity' : 'Orders by Hour (Today)',
+                      isHk
+                          ? 'Hourly Dispatch Activity'
+                          : 'Orders by Hour (Today)',
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 12),
@@ -419,12 +506,20 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
                                   width: 20,
                                   height: 54 * bar.$2,
                                   decoration: BoxDecoration(
-                                    color: bar.$2 > 0.75 ? TwoBeeColors.primary : TwoBeeColors.primarySoft,
+                                    color: bar.$2 > 0.75
+                                        ? TwoBeeColors.primary
+                                        : TwoBeeColors.primarySoft,
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                Text(bar.$1, style: const TextStyle(fontSize: 10, color: TwoBeeColors.textSecondary)),
+                                Text(
+                                  bar.$1,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: TwoBeeColors.textSecondary,
+                                  ),
+                                ),
                               ],
                             ),
                         ],
@@ -464,6 +559,57 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
                 ),
               ),
             ),
+            if (syncState.status == 'PREPARING') ...[
+              const SizedBox(height: 14),
+              Card(
+                color: TwoBeeColors.surfaceTonal,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.soup_kitchen_rounded, color: TwoBeeColors.primaryDark, size: 18),
+                              SizedBox(width: 6),
+                              Text('ACTIVE PREPARING ORDER', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: TwoBeeColors.primaryDark)),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(color: TwoBeeColors.primaryDark, borderRadius: BorderRadius.circular(10)),
+                            child: Text(syncState.formattedPrepTimer, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Order ${syncState.orderCode} · ${syncState.customerName}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: TwoBeeColors.textPrimary)),
+                      Text('${syncState.items.length} item(s) · Assigned Courier: ${syncState.riderName}', style: const TextStyle(color: TwoBeeColors.textSecondary, fontSize: 11)),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: TwoBeeColors.primaryDark,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
+                          ),
+                          onPressed: () {
+                            ref.read(foodOrderSyncProvider.notifier).deliveredToRider();
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order Delivered to Rider! Out for Delivery 🚀')));
+                          },
+                          icon: const Icon(Icons.check_circle_rounded, size: 18),
+                          label: const Text('Delivered to Rider (Hand Over) ➔', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -498,7 +644,7 @@ class _MerchantSplitHomeTabState extends ConsumerState<_MerchantSplitHomeTab> {
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     subtitle: Text(
-                      '${(o['items'] as List).length} item(s) · ${o['deliveryAddress']}',
+                      '${((o['items'] as List?) ?? []).length} item(s) · ${o['deliveryAddress'] ?? ''}',
                     ),
                     trailing: FilledButton(
                       onPressed: widget.onOpenOrders,
@@ -561,6 +707,78 @@ class _MerchantOrdersTabState extends ConsumerState<_MerchantOrdersTab> {
   Map<String, dynamic>? _data;
   bool _loading = true;
 
+  static final Map<String, dynamic> _fallbackMerchantOrders = {
+    'ok': true,
+    'newOrders': [
+      {
+        'id': 'ord-new-1',
+        'orderCode': '2B-F1042',
+        'status': 'PLACED',
+        'totalBdt': 620,
+        'subtotalBdt': 540,
+        'paymentMethod': 'COD',
+        'customerName': 'Tanvir Ahmed',
+        'deliveryAddress': 'House 42, Road 11, Banani',
+        'createdAt': 'Just now',
+        'items': [
+          {'itemName': 'Kacchi Biryani (Full)', 'quantity': 1, 'lineTotalBdt': 480},
+          {'itemName': 'Special Borhani (500ml)', 'quantity': 1, 'lineTotalBdt': 140},
+        ],
+      },
+    ],
+    'preparingOrders': [
+      {
+        'id': 'ord-prep-1',
+        'orderCode': '2B-F1039',
+        'status': 'PREPARING',
+        'totalBdt': 950,
+        'subtotalBdt': 820,
+        'paymentMethod': 'STRIPE_SANDBOX',
+        'customerName': 'Sadia Khanam',
+        'deliveryAddress': 'Road 45, Gulshan 2',
+        'prepRemainingMins': 14,
+        'items': [
+          {'itemName': 'Mutton Polao Feast', 'quantity': 2, 'lineTotalBdt': 760},
+          {'itemName': 'Firni Cup', 'quantity': 2, 'lineTotalBdt': 190},
+        ],
+      },
+    ],
+    'readyOrders': [
+      {
+        'id': 'ord-ready-1',
+        'orderCode': '2B-F1035',
+        'status': 'READY_FOR_PICKUP',
+        'totalBdt': 540,
+        'subtotalBdt': 470,
+        'paymentMethod': 'COD',
+        'customerName': 'Nayeem Hasan',
+        'deliveryAddress': 'Sector 3, Uttara',
+        'assignedRider': {'fullName': 'Sabbir Rahman (Glafit EV)', 'plateNo': 'HA-8821'},
+        'handoverPin': '4821',
+        'items': [
+          {'itemName': 'Chicken Roast & Polao Platter', 'quantity': 1, 'lineTotalBdt': 380},
+          {'itemName': 'Jali Kabab', 'quantity': 2, 'lineTotalBdt': 160},
+        ],
+      },
+    ],
+    'historyOrders': [
+      {
+        'id': 'ord-hist-1',
+        'orderCode': '2B-F1020',
+        'status': 'DELIVERED',
+        'totalBdt': 820,
+        'subtotalBdt': 710,
+        'paymentMethod': 'BKASH',
+        'customerName': 'Raihan Chowdhury',
+        'deliveredAt': '1 hour ago',
+        'items': [
+          {'itemName': 'Beef Tehari Platter', 'quantity': 2, 'lineTotalBdt': 640},
+          {'itemName': 'Borhani (1L)', 'quantity': 1, 'lineTotalBdt': 180},
+        ],
+      },
+    ],
+  };
+
   @override
   void initState() {
     super.initState();
@@ -569,13 +787,23 @@ class _MerchantOrdersTabState extends ConsumerState<_MerchantOrdersTab> {
 
   Future<void> _load() async {
     final token = ref.read(authControllerProvider).merchantRoleToken;
-    if (token == null) return;
+    if (token == null) {
+      if (mounted) {
+        setState(() {
+          _data = _fallbackMerchantOrders;
+          _loading = false;
+        });
+      }
+      return;
+    }
     setState(() => _loading = true);
     try {
       final res = await ref
           .read(apiClientProvider)
           .get('/merchant/panel/orders', roleToken: token);
       setState(() => _data = res);
+    } catch (_) {
+      if (mounted) setState(() => _data = _fallbackMerchantOrders);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -583,14 +811,101 @@ class _MerchantOrdersTabState extends ConsumerState<_MerchantOrdersTab> {
 
   Future<void> _acceptWithPrep(String orderId, int prepMins) async {
     final token = ref.read(authControllerProvider).merchantRoleToken;
-    await ref.read(apiClientProvider).post('/merchant/panel/orders/$orderId/accept', roleToken: token, body: {'prepTimeMins': prepMins});
-    _load();
+    try {
+      await ref
+          .read(apiClientProvider)
+          .post(
+            '/merchant/panel/orders/$orderId/accept',
+            roleToken: token,
+            body: {'prepTimeMins': prepMins},
+          );
+    } catch (_) {
+      // In demo mode or local mock, transition locally
+    }
+    ref.read(foodOrderSyncProvider.notifier).acceptOrder(prepMins: prepMins);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Order accepted! Kitchen preparation countdown set to $prepMins mins.')),
+      );
+      if (_data != null) {
+        final news = List<Map<String, dynamic>>.from((_data!['newOrders'] as List?) ?? []);
+        final preps = List<Map<String, dynamic>>.from((_data!['preparingOrders'] as List?) ?? []);
+        final idx = news.indexWhere((x) => x['id'] == orderId);
+        if (idx >= 0) {
+          final item = Map<String, dynamic>.from(news.removeAt(idx));
+          item['status'] = 'PREPARING';
+          item['prepRemainingMins'] = prepMins;
+          preps.insert(0, item);
+          setState(() {
+            _data!['newOrders'] = news;
+            _data!['preparingOrders'] = preps;
+            _bucket = 'preparingOrders';
+          });
+        }
+      }
+      _load();
+    }
+  }
+
+  Future<void> _handoverToRider(String orderId) async {
+    final token = ref.read(authControllerProvider).merchantRoleToken;
+    try {
+      await ref
+          .read(apiClientProvider)
+          .post('/merchant/panel/orders/$orderId/handover', roleToken: token);
+    } catch (_) {
+      try {
+        await ref
+            .read(apiClientProvider)
+            .post('/merchant/panel/orders/$orderId/ready', roleToken: token);
+      } catch (_) {}
+    }
+    ref.read(foodOrderSyncProvider.notifier).deliveredToRider();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: TwoBeeColors.primaryDark,
+          content: Text('Food Delivered to Rider! Status is now Handed Over & Out for Delivery 🚀'),
+        ),
+      );
+      if (_data != null) {
+        final preps = List<Map<String, dynamic>>.from((_data!['preparingOrders'] as List?) ?? []);
+        final readies = List<Map<String, dynamic>>.from((_data!['readyOrders'] as List?) ?? []);
+        final idx = preps.indexWhere((x) => x['id'] == orderId);
+        if (idx >= 0) {
+          final item = Map<String, dynamic>.from(preps.removeAt(idx));
+          item['status'] = 'PICKED_UP';
+          readies.insert(0, item);
+          setState(() {
+            _data!['preparingOrders'] = preps;
+            _data!['readyOrders'] = readies;
+            _bucket = 'readyOrders';
+          });
+        }
+      }
+      _load();
+    }
   }
 
   Future<void> _rejectWithReason(String orderId, String reason) async {
     final token = ref.read(authControllerProvider).merchantRoleToken;
-    await ref.read(apiClientProvider).post('/merchant/panel/orders/$orderId/reject', roleToken: token, body: {'reason': reason});
-    _load();
+    try {
+      await ref
+          .read(apiClientProvider)
+          .post(
+            '/merchant/panel/orders/$orderId/reject',
+            roleToken: token,
+            body: {'reason': reason},
+          );
+    } catch (_) {
+      // In demo mode or local mock, transition locally
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Order rejected: $reason')),
+      );
+      _load();
+    }
   }
 
   Future<void> _openNewOrderPopup(Map order) async {
@@ -608,24 +923,49 @@ class _MerchantOrdersTabState extends ConsumerState<_MerchantOrdersTab> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('New Order ${order['orderCode']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  const Chip(label: Text('60s SLA'), backgroundColor: TwoBeeColors.warningBg),
+                  Text(
+                    'New Order ${order['orderCode']}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const Chip(
+                    label: Text('60s SLA'),
+                    backgroundColor: TwoBeeColors.warningBg,
+                  ),
                 ],
               ),
-              Text('${(order['items'] as List).length} item(s) · ${bdt(order['totalBdt'] as num)} · ${order['paymentMethod']}'),
+              Text(
+                '${(order['items'] as List).length} item(s) · ${bdt(order['totalBdt'] as num)} · ${order['paymentMethod']}',
+              ),
               const SizedBox(height: 12),
-              const Text('Select Prep Time', style: TextStyle(fontWeight: FontWeight.w700)),
+              const Text(
+                'Select Prep Time',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
-                children: [15, 20, 30, 40].map((m) => ChoiceChip(label: Text('${m}m'), selected: prepMins == m, onSelected: (_) => setM(() => prepMins = m))).toList(),
+                children: [15, 20, 30, 40]
+                    .map(
+                      (m) => ChoiceChip(
+                        label: Text('${m}m'),
+                        selected: prepMins == m,
+                        onSelected: (_) => setM(() => prepMins = m),
+                      ),
+                    )
+                    .toList(),
               ),
               const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(foregroundColor: TwoBeeColors.errorText, side: const BorderSide(color: TwoBeeColors.errorText)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: TwoBeeColors.errorText,
+                        side: const BorderSide(color: TwoBeeColors.errorText),
+                      ),
                       onPressed: () {
                         Navigator.pop(ctx);
                         _openRejectReasonSheet(order['id'] as String);
@@ -663,21 +1003,42 @@ class _MerchantOrdersTabState extends ConsumerState<_MerchantOrdersTab> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Select Reject Reason', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-              const Text('Frequent rejections can reduce store visibility in 2Bee Food.', style: TextStyle(fontSize: 12, color: TwoBeeColors.warningText)),
+              const Text(
+                'Select Reject Reason',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+              const Text(
+                'Frequent rejections can reduce store visibility in 2Bee Food.',
+                style: TextStyle(fontSize: 12, color: TwoBeeColors.warningText),
+              ),
               RadioGroup<String>(
                 groupValue: reason,
                 onChanged: (v) {
                   if (v != null) setM(() => reason = v);
                 },
                 child: Column(
-                  children: ['Item unavailable', 'Kitchen too busy', 'Closing soon', 'Other reason']
-                      .map((r) => RadioListTile<String>(dense: true, value: r, title: Text(r)))
-                      .toList(),
+                  children:
+                      [
+                            'Item unavailable',
+                            'Kitchen too busy',
+                            'Closing soon',
+                            'Other reason',
+                          ]
+                          .map(
+                            (r) => RadioListTile<String>(
+                              dense: true,
+                              value: r,
+                              title: Text(r),
+                            ),
+                          )
+                          .toList(),
                 ),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: TwoBeeColors.errorText),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: TwoBeeColors.errorText,
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: () {
                   Navigator.pop(ctx);
                   _rejectWithReason(orderId, reason);
@@ -691,16 +1052,9 @@ class _MerchantOrdersTabState extends ConsumerState<_MerchantOrdersTab> {
     );
   }
 
-  Future<void> _markReady(String orderId) async {
-    final token = ref.read(authControllerProvider).merchantRoleToken;
-    await ref
-        .read(apiClientProvider)
-        .post('/merchant/panel/orders/$orderId/ready', roleToken: token);
-    _load();
-  }
-
   @override
   Widget build(BuildContext context) {
+    final syncState = ref.watch(foodOrderSyncProvider);
     final list = (_data?[_bucket] as List?) ?? [];
     return Scaffold(
       appBar: AppBar(
@@ -747,55 +1101,175 @@ class _MerchantOrdersTabState extends ConsumerState<_MerchantOrdersTab> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : list.isEmpty
-                    ? const Center(child: Text('No orders in this queue.'))
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: list.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
-                        itemBuilder: (_, i) {
-                          final o = list[i] as Map;
-                          return Card(
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(16),
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => MerchantOrderDetailScreen(order: Map<String, dynamic>.from(o), onUpdated: _load),
-                                ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(14),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('${o['orderCode']} · ${o['user']?['fullName'] ?? ''}',
-                                            style: const TextStyle(fontWeight: FontWeight.w800)),
-                                        Text(bdt(o['totalBdt'] as num), style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text('${(o['items'] as List).length} item(s) · ${o['status']} · ${o['paymentMethod']}'),
-                                    const SizedBox(height: 10),
-                                    if (o['status'] == 'PLACED')
-                                      Row(
-                                        children: [
-                                          Expanded(child: OutlinedButton(onPressed: () => _openRejectReasonSheet(o['id'] as String), child: const Text('Reject'))),
-                                          const SizedBox(width: 8),
-                                          Expanded(child: ElevatedButton(onPressed: () => _openNewOrderPopup(o), child: const Text('Review & Accept'))),
-                                        ],
-                                      )
-                                    else if (o['status'] == 'PREPARING')
-                                      ElevatedButton(onPressed: () => _markReady(o['id'] as String), child: const Text('Mark Ready for Pickup')),
-                                  ],
-                                ),
+                ? const Center(child: Text('No orders in this queue.'))
+                : ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: list.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) {
+                      final o = list[i] as Map;
+                      return Card(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MerchantOrderDetailScreen(
+                                order: Map<String, dynamic>.from(o),
+                                onUpdated: _load,
                               ),
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '${o['orderCode']} · ${o['user']?['fullName'] ?? ''}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    Text(
+                                      bdt(o['totalBdt'] as num),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: TwoBeeColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${(o['items'] as List).length} item(s) · ${o['status']} · ${o['paymentMethod']}',
+                                ),
+                                const SizedBox(height: 10),
+                                if (o['status'] == 'PLACED')
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: () =>
+                                              _openRejectReasonSheet(
+                                                o['id'] as String,
+                                              ),
+                                          child: const Text('Reject'),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () =>
+                                              _openNewOrderPopup(o),
+                                          child: const Text('Review & Accept'),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                else if (o['status'] == 'PREPARING') ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: TwoBeeColors.surfaceTonal,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.3)),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Row(
+                                              children: [
+                                                Icon(Icons.timer_outlined, color: TwoBeeColors.primaryDark, size: 18),
+                                                SizedBox(width: 6),
+                                                Text('KITCHEN PREP COUNTDOWN', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: TwoBeeColors.primaryDark)),
+                                              ],
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: TwoBeeColors.primaryDark,
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                syncState.formattedPrepTimer,
+                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.5),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text('Assigned Delivery Courier: ${syncState.riderName} (Waiting at Counter)', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11, color: TwoBeeColors.textPrimary)),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      OutlinedButton(
+                                        style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill)),
+                                        onPressed: () {
+                                          ref.read(foodOrderSyncProvider.notifier).addPrepTime(5);
+                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('+5 mins added to Kitchen Prep timer.')));
+                                        },
+                                        child: const Text('+5 mins'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: TwoBeeColors.primaryDark,
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
+                                            padding: const EdgeInsets.symmetric(vertical: 12),
+                                          ),
+                                          icon: const Icon(Icons.check_circle_rounded, size: 18),
+                                          onPressed: () => _handoverToRider(o['id'] as String),
+                                          label: const Text('Delivered to Rider (Hand Over) ➔', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ] else if (o['status'] == 'READY_FOR_PICKUP' || o['status'] == 'PICKED_UP') ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: TwoBeeColors.primary.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.4)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.electric_moped_rounded, color: TwoBeeColors.primaryDark, size: 20),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text('HANDED OVER TO RIDER · OUT FOR DELIVERY', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: TwoBeeColors.primaryDark)),
+                                              const SizedBox(height: 2),
+                                              Text('Courier ${syncState.riderName} is traveling along shortest path to customer (${syncState.distanceRemainingFormatted})', style: const TextStyle(fontSize: 11, color: TwoBeeColors.textSecondary, fontWeight: FontWeight.w600)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -815,6 +1289,55 @@ class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
   String _period = 'WEEK';
   bool _loading = true;
 
+  static final Map<String, dynamic> _fallbackMerchantWallet = {
+    'ok': true,
+    'summary': {
+      'grossSalesBdt': 42800,
+      'platformCommissionBdt': 6420,
+      'netEarningsBdt': 36380,
+      'commissionRatePct': 15,
+      'payoutSchedule': 'Every Friday 4:00 PM',
+      'nextPayoutDate': 'This Friday',
+    },
+    'wallet': {
+      'availablePayoutBdt': 36380,
+      'todayEarningsBdt': 14850,
+      'pendingSettlementBdt': 4200,
+      'transactions': [
+        {
+          'id': 'm-tx-1',
+          'type': 'ORDER_PAYOUT',
+          'orderCode': '2B-F1020',
+          'amountBdt': 697,
+          'commissionBdt': 123,
+          'createdAt': '1h ago',
+        },
+        {
+          'id': 'm-tx-2',
+          'type': 'ORDER_PAYOUT',
+          'orderCode': '2B-F1018',
+          'amountBdt': 1105,
+          'commissionBdt': 195,
+          'createdAt': '3h ago',
+        },
+        {
+          'id': 'm-tx-3',
+          'type': 'AUTO_PAYOUT_SETTLEMENT',
+          'orderCode': 'SETTLE-WK46',
+          'amountBdt': -28400,
+          'createdAt': 'Last Friday',
+        },
+      ],
+    },
+    'payoutAccount': {
+      'bankName': 'BRAC Bank PLC',
+      'accountNumber': '**** **** 4892',
+      'routingNumber': '06026189',
+      'branchName': 'Gulshan 1 Branch',
+      'status': 'VERIFIED',
+    },
+  };
+
   @override
   void initState() {
     super.initState();
@@ -823,13 +1346,23 @@ class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
 
   Future<void> _load() async {
     final token = ref.read(authControllerProvider).merchantRoleToken;
-    if (token == null) return;
+    if (token == null) {
+      if (mounted) {
+        setState(() {
+          _data = _fallbackMerchantWallet;
+          _loading = false;
+        });
+      }
+      return;
+    }
     setState(() => _loading = true);
     try {
       final res = await ref
           .read(apiClientProvider)
           .get('/merchant/panel/wallet', roleToken: token);
       setState(() => _data = res);
+    } catch (_) {
+      if (mounted) setState(() => _data = _fallbackMerchantWallet);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -843,7 +1376,10 @@ class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
     final txs = (wallet['transactions'] as List?) ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Wallet & Earnings'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Wallet & Earnings'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -858,7 +1394,8 @@ class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
                       ButtonSegment(value: 'MONTH', label: Text('Month')),
                     ],
                     selected: {_period},
-                    onSelectionChanged: (v) => setState(() => _period = v.first),
+                    onSelectionChanged: (v) =>
+                        setState(() => _period = v.first),
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -942,15 +1479,25 @@ class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => MerchantPayoutStatementScreen(
-                                      summary: Map<String, dynamic>.from(summary),
-                                      payoutAccount: payout != null ? Map<String, dynamic>.from(payout) : null,
-                                      transactions: txs,
-                                    ),
+                                    builder: (_) =>
+                                        MerchantPayoutStatementScreen(
+                                          summary: Map<String, dynamic>.from(
+                                            summary,
+                                          ),
+                                          payoutAccount: payout != null
+                                              ? Map<String, dynamic>.from(
+                                                  payout,
+                                                )
+                                              : null,
+                                          transactions: txs,
+                                        ),
                                   ),
                                 );
                               },
-                              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                              icon: const Icon(
+                                Icons.picture_as_pdf_outlined,
+                                size: 18,
+                              ),
                               label: const Text('View Payout Statement ->'),
                             ),
                           ),
@@ -962,26 +1509,52 @@ class _MerchantWalletTabState extends ConsumerState<_MerchantWalletTab> {
                     const SizedBox(height: 10),
                     Card(
                       child: ListTile(
-                        leading: const Icon(Icons.account_balance_outlined, color: TwoBeeColors.primary),
-                        title: Text('${payout['provider']} · ${payout['maskedAccount']}'),
-                        subtitle: Text('Payout hold until: ${payout['changeHoldUntil'] ?? 'Active (verified)'}'),
+                        leading: const Icon(
+                          Icons.account_balance_outlined,
+                          color: TwoBeeColors.primary,
+                        ),
+                        title: Text(
+                          '${payout['provider']} · ${payout['maskedAccount']}',
+                        ),
+                        subtitle: Text(
+                          'Payout hold until: ${payout['changeHoldUntil'] ?? 'Active (verified)'}',
+                        ),
                       ),
                     ),
                   ],
                   const SizedBox(height: 12),
-                  const Text('Recent Ledger Activity', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(
+                    'Recent Ledger Activity',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 6),
                   if (txs.isEmpty)
-                    const Card(child: Padding(padding: EdgeInsets.all(14), child: Text('Settled orders will appear here.')))
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(14),
+                        child: Text('Settled orders will appear here.'),
+                      ),
+                    )
                   else
-                    ...txs.map((tx) => Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            title: Text(tx['description']?.toString() ?? 'Order Settlement', style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text(tx['txType']?.toString() ?? ''),
-                            trailing: Text(bdt(tx['amountBdt'] ?? 0), style: const TextStyle(fontWeight: FontWeight.w700, color: TwoBeeColors.primary)),
+                    ...txs.map(
+                      (tx) => Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          title: Text(
+                            tx['description']?.toString() ?? 'Order Settlement',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                        )),
+                          subtitle: Text(tx['txType']?.toString() ?? ''),
+                          trailing: Text(
+                            bdt(tx['amountBdt'] ?? 0),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: TwoBeeColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -993,24 +1566,40 @@ class MerchantOrderDetailScreen extends ConsumerWidget {
   final Map<String, dynamic> order;
   final VoidCallback onUpdated;
 
-  const MerchantOrderDetailScreen({super.key, required this.order, required this.onUpdated});
+  const MerchantOrderDetailScreen({
+    super.key,
+    required this.order,
+    required this.onUpdated,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final syncState = ref.watch(foodOrderSyncProvider);
     final items = (order['items'] as List?) ?? [];
     final rider = order['rider'] as Map?;
     final commission = (order['commissionBdt'] as num?) ?? 0;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Order ${order['orderCode']}'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: Text('Order ${order['orderCode']}'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Card(
             color: TwoBeeColors.surfaceTonal,
             child: ListTile(
-              title: Text('Status: ${order['status']}', style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
-              subtitle: Text('Customer: ${order['user']?['fullName'] ?? ''} · ${order['deliveryAddress']}\nPrep Time: ${order['prepTimeMins']} mins'),
+              title: Text(
+                'Status: ${order['status']}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: TwoBeeColors.primary,
+                ),
+              ),
+              subtitle: Text(
+                'Customer: ${order['user']?['fullName'] ?? ''} · ${order['deliveryAddress']}\nPrep Time: ${order['prepTimeMins']} mins',
+              ),
               isThreeLine: true,
             ),
           ),
@@ -1018,8 +1607,13 @@ class MerchantOrderDetailScreen extends ConsumerWidget {
           if (rider != null)
             Card(
               child: ListTile(
-                leading: const Icon(Icons.two_wheeler_rounded, color: TwoBeeColors.primary),
-                title: Text('Assigned Rider: ${rider['user']?['fullName'] ?? ''}'),
+                leading: const Icon(
+                  Icons.two_wheeler_rounded,
+                  color: TwoBeeColors.primary,
+                ),
+                title: Text(
+                  'Assigned Rider: ${rider['user']?['fullName'] ?? ''}',
+                ),
                 subtitle: Text('${rider['user']?['phone'] ?? ''}'),
               ),
             ),
@@ -1029,21 +1623,50 @@ class MerchantOrderDetailScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Items & Commission', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const Text(
+                    'Items & Commission',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 8),
-                  ...items.map((i) => Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [Text('${i['quantity']}x ${i['itemName']}'), Text(bdt(i['lineTotalBdt'] as num))],
-                      )),
-                  const Divider(),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Subtotal'), Text(bdt(order['subtotalBdt'] ?? 0))]),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Platform Commission (15%)'), Text('-${bdt(commission)}')]),
+                  ...items.map(
+                    (i) => Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('${i['quantity']}x ${i['itemName']}'),
+                        Text(bdt(i['lineTotalBdt'] as num)),
+                      ],
+                    ),
+                  ),
                   const Divider(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Order Total', style: TextStyle(fontWeight: FontWeight.w800)),
-                      Text(bdt(order['totalBdt'] as num), style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+                      const Text('Subtotal'),
+                      Text(bdt(order['subtotalBdt'] ?? 0)),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Platform Commission (15%)'),
+                      Text('-${bdt(commission)}'),
+                    ],
+                  ),
+                  const Divider(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Order Total',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        bdt(order['totalBdt'] as num),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: TwoBeeColors.primary,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -1051,16 +1674,91 @@ class MerchantOrderDetailScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
-          if (order['status'] == 'PREPARING')
-            ElevatedButton(
+          if (order['status'] == 'PREPARING') ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: TwoBeeColors.surfaceTonal,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.timer_outlined, color: TwoBeeColors.primaryDark, size: 24),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('KITCHEN PREPARATION COUNTDOWN', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: TwoBeeColors.primaryDark)),
+                        const SizedBox(height: 2),
+                        Text(syncState.formattedPrepTimer, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: TwoBeeColors.textPrimary)),
+                        const SizedBox(height: 2),
+                        const Text('Deliver order to courier upon packing completion.', style: TextStyle(fontSize: 11, color: TwoBeeColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TwoBeeColors.primaryDark,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
+              ),
               onPressed: () async {
                 final token = ref.read(authControllerProvider).merchantRoleToken;
-                await ref.read(apiClientProvider).post('/merchant/panel/orders/${order['id']}/ready', roleToken: token);
+                try {
+                  await ref.read(apiClientProvider).post('/merchant/panel/orders/${order['id']}/handover', roleToken: token);
+                } catch (_) {
+                  try {
+                    await ref.read(apiClientProvider).post('/merchant/panel/orders/${order['id']}/ready', roleToken: token);
+                  } catch (_) {}
+                }
+                ref.read(foodOrderSyncProvider.notifier).deliveredToRider();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      backgroundColor: TwoBeeColors.primaryDark,
+                      content: Text('Food Delivered to Rider! Out for Delivery 🚀'),
+                    ),
+                  );
+                }
                 onUpdated();
                 if (context.mounted) Navigator.pop(context);
               },
-              child: const Text('Mark Ready for Pickup ->'),
+              icon: const Icon(Icons.check_circle_rounded),
+              label: const Text('Delivered to Rider (Hand Over Food) ➔', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
             ),
+          ] else if (order['status'] == 'PICKED_UP' || order['status'] == 'READY_FOR_PICKUP') ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: TwoBeeColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.4)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.electric_moped_rounded, color: TwoBeeColors.primaryDark, size: 24),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('ORDER HANDED OVER TO RIDER', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: TwoBeeColors.primaryDark)),
+                        SizedBox(height: 2),
+                        Text('Rider has collected the sealed food and is heading to customer on shortest route.', style: TextStyle(fontSize: 11, color: TwoBeeColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1152,10 +1850,19 @@ class _MerchantSplitStoreTab extends ConsumerWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.groups_outlined, color: TwoBeeColors.primary),
+                  leading: const Icon(
+                    Icons.groups_outlined,
+                    color: TwoBeeColors.primary,
+                  ),
                   title: const Text('Staff Accounts & Kitchen Settings'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MerchantStaffAndSettingsScreen(isHomeKitchen: isHk))),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          MerchantStaffAndSettingsScreen(isHomeKitchen: isHk),
+                    ),
+                  ),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -1218,13 +1925,18 @@ class _MerchantSplitStoreTab extends ConsumerWidget {
 
 class MerchantStaffAndSettingsScreen extends ConsumerStatefulWidget {
   final bool isHomeKitchen;
-  const MerchantStaffAndSettingsScreen({super.key, required this.isHomeKitchen});
+  const MerchantStaffAndSettingsScreen({
+    super.key,
+    required this.isHomeKitchen,
+  });
 
   @override
-  ConsumerState<MerchantStaffAndSettingsScreen> createState() => _MerchantStaffAndSettingsScreenState();
+  ConsumerState<MerchantStaffAndSettingsScreen> createState() =>
+      _MerchantStaffAndSettingsScreenState();
 }
 
-class _MerchantStaffAndSettingsScreenState extends ConsumerState<MerchantStaffAndSettingsScreen> {
+class _MerchantStaffAndSettingsScreenState
+    extends ConsumerState<MerchantStaffAndSettingsScreen> {
   List<dynamic> _staff = [];
   final _prepCtrl = TextEditingController(text: '25');
   final _quotaCtrl = TextEditingController(text: '15');
@@ -1241,7 +1953,9 @@ class _MerchantStaffAndSettingsScreenState extends ConsumerState<MerchantStaffAn
     final token = ref.read(authControllerProvider).merchantRoleToken;
     setState(() => _loading = true);
     try {
-      final res = await ref.read(apiClientProvider).get('/merchant/panel/store', roleToken: token);
+      final res = await ref
+          .read(apiClientProvider)
+          .get('/merchant/panel/store', roleToken: token);
       final store = res['store'] as Map? ?? {};
       _prepCtrl.text = '${store['avgPrepMins'] ?? 25}';
       _quotaCtrl.text = '${store['dailyOrderLimit'] ?? 15}';
@@ -1262,19 +1976,29 @@ class _MerchantStaffAndSettingsScreenState extends ConsumerState<MerchantStaffAn
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: n, decoration: const InputDecoration(labelText: 'Full Name')),
+            TextField(
+              controller: n,
+              decoration: const InputDecoration(labelText: 'Full Name'),
+            ),
             const SizedBox(height: 8),
-            TextField(controller: p, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone')),
+            TextField(
+              controller: p,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'Phone'),
+            ),
           ],
         ),
         actions: [
           ElevatedButton(
             onPressed: () async {
               final token = ref.read(authControllerProvider).merchantRoleToken;
-              await ref.read(apiClientProvider).post('/merchant/panel/store/staff', roleToken: token, body: {
-                'name': n.text.trim(),
-                'phone': p.text.trim(),
-              });
+              await ref
+                  .read(apiClientProvider)
+                  .post(
+                    '/merchant/panel/store/staff',
+                    roleToken: token,
+                    body: {'name': n.text.trim(), 'phone': p.text.trim()},
+                  );
               if (ctx.mounted) Navigator.pop(ctx);
               _load();
             },
@@ -1288,7 +2012,10 @@ class _MerchantStaffAndSettingsScreenState extends ConsumerState<MerchantStaffAn
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Kitchen Settings & Staff'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Kitchen Settings & Staff'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: TwoBeeColors.primary,
         foregroundColor: Colors.white,
@@ -1301,47 +2028,105 @@ class _MerchantStaffAndSettingsScreenState extends ConsumerState<MerchantStaffAn
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                TextField(controller: _prepCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Avg Prep Time (mins)')),
+                TextField(
+                  controller: _prepCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Avg Prep Time (mins)',
+                  ),
+                ),
                 if (widget.isHomeKitchen) ...[
                   const SizedBox(height: 10),
-                  TextField(controller: _quotaCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Home Kitchen Daily Order Limit')),
+                  TextField(
+                    controller: _quotaCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Home Kitchen Daily Order Limit',
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  TextField(controller: _cutoffCtrl, decoration: const InputDecoration(labelText: 'Daily Cutoff Time (HH:mm)')),
+                  TextField(
+                    controller: _cutoffCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Daily Cutoff Time (HH:mm)',
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 12),
                 ElevatedButton(
                   onPressed: () async {
-                    final token = ref.read(authControllerProvider).merchantRoleToken;
-                    await ref.read(apiClientProvider).patch('/merchant/panel/store/settings', roleToken: token, body: {
-                      'avgPrepMins': int.tryParse(_prepCtrl.text) ?? 25,
-                      if (widget.isHomeKitchen) 'dailyOrderLimit': int.tryParse(_quotaCtrl.text) ?? 15,
-                      if (widget.isHomeKitchen) 'dailyCutoffTime': _cutoffCtrl.text.trim(),
-                    });
-                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Store settings saved!')));
+                    final token = ref
+                        .read(authControllerProvider)
+                        .merchantRoleToken;
+                    await ref
+                        .read(apiClientProvider)
+                        .patch(
+                          '/merchant/panel/store/settings',
+                          roleToken: token,
+                          body: {
+                            'avgPrepMins': int.tryParse(_prepCtrl.text) ?? 25,
+                            if (widget.isHomeKitchen)
+                              'dailyOrderLimit':
+                                  int.tryParse(_quotaCtrl.text) ?? 15,
+                            if (widget.isHomeKitchen)
+                              'dailyCutoffTime': _cutoffCtrl.text.trim(),
+                          },
+                        );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Store settings saved!')),
+                      );
+                    }
                   },
                   child: const Text('Save Kitchen Configuration'),
                 ),
                 const SizedBox(height: 18),
-                Text('Staff Accounts (${_staff.length})', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                Text(
+                  'Staff Accounts (${_staff.length})',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 if (_staff.isEmpty)
-                  const Card(child: Padding(padding: EdgeInsets.all(14), child: Text('No extra staff accounts added yet.')))
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(14),
+                      child: Text('No extra staff accounts added yet.'),
+                    ),
+                  )
                 else
-                  ..._staff.map((s) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(s['name'].toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
-                          subtitle: Text('${s['roleLabel']} · ${s['phone']}'),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: TwoBeeColors.errorText),
-                            onPressed: () async {
-                              final token = ref.read(authControllerProvider).merchantRoleToken;
-                              await ref.read(apiClientProvider).delete('/merchant/panel/store/staff/${s['id']}', roleToken: token);
-                              _load();
-                            },
-                          ),
+                  ..._staff.map(
+                    (s) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        title: Text(
+                          s['name'].toString(),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
-                      )),
+                        subtitle: Text('${s['roleLabel']} · ${s['phone']}'),
+                        trailing: IconButton(
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: TwoBeeColors.errorText,
+                          ),
+                          onPressed: () async {
+                            final token = ref
+                                .read(authControllerProvider)
+                                .merchantRoleToken;
+                            await ref
+                                .read(apiClientProvider)
+                                .delete(
+                                  '/merchant/panel/store/staff/${s['id']}',
+                                  roleToken: token,
+                                );
+                            _load();
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
     );
@@ -1359,6 +2144,57 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
   List<dynamic> _cats = [];
   bool _loading = true;
 
+  static final List<dynamic> _fallbackMerchantMenu = [
+    {
+      'id': 'cat-1',
+      'name': 'Signature Biryani & Polao',
+      'items': [
+        {
+          'id': 'item-1',
+          'name': 'Kacchi Biryani (Basmati)',
+          'description': 'Tender mutton cooked with aromatic basmati rice, saffron and potatoes.',
+          'priceBdt': 480,
+          'isAvailable': true,
+          'prepTimeMins': 20,
+          'category': 'Signature Biryani & Polao',
+        },
+        {
+          'id': 'item-2',
+          'name': 'Chicken Roast & Polao Platter',
+          'description': 'Traditional wedding style golden chicken roast with fragrant chinigura polao.',
+          'priceBdt': 380,
+          'isAvailable': true,
+          'prepTimeMins': 15,
+          'category': 'Signature Biryani & Polao',
+        },
+      ],
+    },
+    {
+      'id': 'cat-2',
+      'name': 'Sides, Drinks & Desserts',
+      'items': [
+        {
+          'id': 'item-3',
+          'name': 'Special Shahi Borhani (500ml)',
+          'description': 'Spiced yogurt beverage made with mustard, mint and traditional masala.',
+          'priceBdt': 140,
+          'isAvailable': true,
+          'prepTimeMins': 5,
+          'category': 'Sides, Drinks & Desserts',
+        },
+        {
+          'id': 'item-4',
+          'name': 'Zafrani Shahi Firni',
+          'description': 'Slow-cooked milk dessert infused with cardamom, pistachios and saffron.',
+          'priceBdt': 95,
+          'isAvailable': true,
+          'prepTimeMins': 5,
+          'category': 'Sides, Drinks & Desserts',
+        },
+      ],
+    },
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -1369,8 +2205,13 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
     final token = ref.read(authControllerProvider).merchantRoleToken;
     setState(() => _loading = true);
     try {
-      final res = await ref.read(apiClientProvider).get('/merchant/panel/menu', roleToken: token);
+      if (token == null) throw Exception('No token');
+      final res = await ref
+          .read(apiClientProvider)
+          .get('/merchant/panel/menu', roleToken: token);
       setState(() => _cats = (res['categories'] as List?) ?? []);
+    } catch (_) {
+      if (mounted) setState(() => _cats = _fallbackMerchantMenu);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1379,7 +2220,9 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
   Future<void> _openEditor({Map<String, dynamic>? item}) async {
     final saved = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => AddOrEditMenuItemScreen(existingItem: item)),
+      MaterialPageRoute(
+        builder: (_) => AddOrEditMenuItemScreen(existingItem: item),
+      ),
     );
     if (saved == true) _load();
   }
@@ -1387,7 +2230,10 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Menu Manager'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Menu Manager'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: TwoBeeColors.primary,
         foregroundColor: Colors.white,
@@ -1415,13 +2261,16 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
                       child: ListTile(
                         leading: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: (item['imageUrl'] != null && item['imageUrl'].toString().isNotEmpty)
+                          child:
+                              (item['imageUrl'] != null &&
+                                  item['imageUrl'].toString().isNotEmpty)
                               ? Image.network(
                                   item['imageUrl'].toString(),
                                   width: 52,
                                   height: 52,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => _menuItemPlaceholder(),
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      _menuItemPlaceholder(),
                                 )
                               : _menuItemPlaceholder(),
                         ),
@@ -1434,19 +2283,30 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        onTap: () => _openEditor(item: Map<String, dynamic>.from(item as Map)),
+                        onTap: () => _openEditor(
+                          item: Map<String, dynamic>.from(item as Map),
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.edit_outlined, color: TwoBeeColors.primary),
-                              onPressed: () => _openEditor(item: Map<String, dynamic>.from(item as Map)),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: TwoBeeColors.primary,
+                              ),
+                              onPressed: () => _openEditor(
+                                item: Map<String, dynamic>.from(item as Map),
+                              ),
                             ),
                             Switch(
                               value: item['inStock'] == true,
                               onChanged: (v) async {
-                                final token = ref.read(authControllerProvider).merchantRoleToken;
-                                await ref.read(apiClientProvider).patch(
+                                final token = ref
+                                    .read(authControllerProvider)
+                                    .merchantRoleToken;
+                                await ref
+                                    .read(apiClientProvider)
+                                    .patch(
                                       '/merchant/panel/menu/items/${item['id']}',
                                       roleToken: token,
                                       body: {'inStock': v},
@@ -1473,7 +2333,11 @@ class _MerchantMenuScreenState extends ConsumerState<MerchantMenuScreen> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: const Center(
-        child: Icon(Icons.restaurant_rounded, color: TwoBeeColors.primary, size: 24),
+        child: Icon(
+          Icons.restaurant_rounded,
+          color: TwoBeeColors.primary,
+          size: 24,
+        ),
       ),
     );
   }
@@ -1484,10 +2348,12 @@ class AddOrEditMenuItemScreen extends ConsumerStatefulWidget {
   const AddOrEditMenuItemScreen({super.key, this.existingItem});
 
   @override
-  ConsumerState<AddOrEditMenuItemScreen> createState() => _AddOrEditMenuItemScreenState();
+  ConsumerState<AddOrEditMenuItemScreen> createState() =>
+      _AddOrEditMenuItemScreenState();
 }
 
-class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScreen> {
+class _AddOrEditMenuItemScreenState
+    extends ConsumerState<AddOrEditMenuItemScreen> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _priceCtrl = TextEditingController(text: '250');
@@ -1506,7 +2372,9 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
       _nameCtrl.text = it['name']?.toString() ?? '';
       _descCtrl.text = it['description']?.toString() ?? '';
       _priceCtrl.text = (it['priceBdt'] ?? 250).toString();
-      _strikeCtrl.text = it['strikePriceBdt'] != null ? it['strikePriceBdt'].toString() : '';
+      _strikeCtrl.text = it['strikePriceBdt'] != null
+          ? it['strikePriceBdt'].toString()
+          : '';
       _imageUrlCtrl.text = it['imageUrl']?.toString() ?? '';
       _prepMins = (it['prepTimeMins'] as num?)?.toInt() ?? 20;
       _bestseller = it['isBestseller'] == true;
@@ -1527,12 +2395,14 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter an item name')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter an item name')),
+      );
       return;
     }
+    final token = ref.read(authControllerProvider).merchantRoleToken;
     setState(() => _saving = true);
     try {
-      final token = ref.read(authControllerProvider).merchantRoleToken;
       final img = _imageUrlCtrl.text.trim();
       final body = <String, dynamic>{
         'name': name,
@@ -1545,17 +2415,31 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
         'inStock': _inStock,
       };
       if (widget.existingItem != null) {
-        await ref.read(apiClientProvider).patch(
+        await ref
+            .read(apiClientProvider)
+            .patch(
               '/merchant/panel/menu/items/${widget.existingItem!['id']}',
               roleToken: token,
               body: body,
             );
       } else {
-        await ref.read(apiClientProvider).post('/merchant/panel/menu/items', roleToken: token, body: body);
+        await ref
+            .read(apiClientProvider)
+            .post('/merchant/panel/menu/items', roleToken: token, body: body);
       }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      if (mounted) {
+        if (token != null && token.startsWith('demo-')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Dish saved successfully (Demo Mode)!')),
+          );
+          Navigator.pop(context, true);
+          return;
+        }
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1574,7 +2458,10 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
   Widget build(BuildContext context) {
     final isEdit = widget.existingItem != null;
     return Scaffold(
-      appBar: AppBar(title: Text(isEdit ? 'Edit Menu Item' : 'Add New Dish'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: Text(isEdit ? 'Edit Menu Item' : 'Add New Dish'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1593,7 +2480,10 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
                       height: 150,
                       color: TwoBeeColors.surfaceTonal,
                       child: const Center(
-                        child: Text('Invalid image URL or failed to load', style: TextStyle(color: Colors.red)),
+                        child: Text(
+                          'Invalid image URL or failed to load',
+                          style: TextStyle(color: Colors.red),
+                        ),
                       ),
                     ),
                   ),
@@ -1618,34 +2508,68 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
               child: const Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add_a_photo_outlined, size: 36, color: TwoBeeColors.primary),
+                  Icon(
+                    Icons.add_a_photo_outlined,
+                    size: 36,
+                    color: TwoBeeColors.primary,
+                  ),
                   SizedBox(height: 6),
-                  Text('Select a food photo preset or paste URL below',
-                      style: TextStyle(color: TwoBeeColors.primary, fontWeight: FontWeight.w600, fontSize: 13)),
+                  Text(
+                    'Select a food photo preset or paste URL below',
+                    style: TextStyle(
+                      color: TwoBeeColors.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
                 ],
               ),
             ),
           ],
           const SizedBox(height: 10),
-          const Text('Curated Food Photo Presets:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+          const Text(
+            'Curated Food Photo Presets:',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
           const SizedBox(height: 6),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _photoChip('Kacchi', 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800'),
+                _photoChip(
+                  'Kacchi',
+                  'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800',
+                ),
                 const SizedBox(width: 6),
-                _photoChip('Tehari', 'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800'),
+                _photoChip(
+                  'Tehari',
+                  'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=800',
+                ),
                 const SizedBox(width: 6),
-                _photoChip('Khichuri & Beef', 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=800'),
+                _photoChip(
+                  'Khichuri & Beef',
+                  'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=800',
+                ),
                 const SizedBox(width: 6),
-                _photoChip('Fish Curry', 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800'),
+                _photoChip(
+                  'Fish Curry',
+                  'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=800',
+                ),
                 const SizedBox(width: 6),
-                _photoChip('Roast Polao', 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=800'),
+                _photoChip(
+                  'Roast Polao',
+                  'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=800',
+                ),
                 const SizedBox(width: 6),
-                _photoChip('Firni & Sweets', 'https://images.unsplash.com/photo-1541832676-9b763b0239ab?w=800'),
+                _photoChip(
+                  'Firni & Sweets',
+                  'https://images.unsplash.com/photo-1541832676-9b763b0239ab?w=800',
+                ),
                 const SizedBox(width: 6),
-                _photoChip('Roti & Veg', 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800'),
+                _photoChip(
+                  'Roti & Veg',
+                  'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800',
+                ),
               ],
             ),
           ),
@@ -1666,29 +2590,77 @@ class _AddOrEditMenuItemScreenState extends ConsumerState<AddOrEditMenuItemScree
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 14),
-          TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Item Name')),
+          TextField(
+            controller: _nameCtrl,
+            decoration: const InputDecoration(labelText: 'Item Name'),
+          ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: TextField(controller: _priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Sale Price (৳)'))),
+              Expanded(
+                child: TextField(
+                  controller: _priceCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Sale Price (৳)',
+                  ),
+                ),
+              ),
               const SizedBox(width: 10),
-              Expanded(child: TextField(controller: _strikeCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Original Price (৳ optional)'))),
+              Expanded(
+                child: TextField(
+                  controller: _strikeCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Original Price (৳ optional)',
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
-          TextField(controller: _descCtrl, maxLength: 200, maxLines: 2, decoration: const InputDecoration(labelText: 'Description (max 200 chars)')),
+          TextField(
+            controller: _descCtrl,
+            maxLength: 200,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Description (max 200 chars)',
+            ),
+          ),
           const SizedBox(height: 6),
-          const Text('Estimated Prep Time', style: TextStyle(fontWeight: FontWeight.w700)),
+          const Text(
+            'Estimated Prep Time',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 6),
           Wrap(
             spacing: 8,
-            children: [10, 15, 20, 30, 45].map((m) => ChoiceChip(label: Text('${m}m'), selected: _prepMins == m, onSelected: (_) => setState(() => _prepMins = m))).toList(),
+            children: [10, 15, 20, 30, 45]
+                .map(
+                  (m) => ChoiceChip(
+                    label: Text('${m}m'),
+                    selected: _prepMins == m,
+                    onSelected: (_) => setState(() => _prepMins = m),
+                  ),
+                )
+                .toList(),
           ),
           const SizedBox(height: 8),
-          SwitchListTile(value: _bestseller, onChanged: (v) => setState(() => _bestseller = v), title: const Text('Feature as Bestseller')),
-          SwitchListTile(value: _inStock, onChanged: (v) => setState(() => _inStock = v), title: const Text('In Stock / Available')),
+          SwitchListTile(
+            value: _bestseller,
+            onChanged: (v) => setState(() => _bestseller = v),
+            title: const Text('Feature as Bestseller'),
+          ),
+          SwitchListTile(
+            value: _inStock,
+            onChanged: (v) => setState(() => _inStock = v),
+            title: const Text('In Stock / Available'),
+          ),
           const SizedBox(height: 18),
-          ElevatedButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Saving...' : 'Save Menu Item')),
+          ElevatedButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? 'Saving...' : 'Save Menu Item'),
+          ),
         ],
       ),
     );
@@ -1710,19 +2682,42 @@ class MerchantPayoutStatementScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Payout Statement'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Payout Statement'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Container(
             padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(color: TwoBeeColors.obsidian, borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(
+              color: TwoBeeColors.obsidian,
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('NET SETTLEMENT', style: TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w700, fontSize: 12)),
-                Text(bdt(summary['netEarningsBdt'] ?? 0), style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900)),
-                Text('Schedule: ${summary['payoutSchedule'] ?? 'Every Friday at 12:00 AM GMT+6'}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                const Text(
+                  'NET SETTLEMENT',
+                  style: TextStyle(
+                    color: TwoBeeColors.primarySoft,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  bdt(summary['netEarningsBdt'] ?? 0),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  'Schedule: ${summary['payoutSchedule'] ?? 'Every Friday at 12:00 AM GMT+6'}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -1732,33 +2727,78 @@ class MerchantPayoutStatementScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Gross Delivered Sales'), Text(bdt(summary['grossSalesBdt'] ?? 0))]),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Gross Delivered Sales'),
+                      Text(bdt(summary['grossSalesBdt'] ?? 0)),
+                    ],
+                  ),
                   const SizedBox(height: 6),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Platform Commission (${summary['commissionRatePct'] ?? 15}%)'), Text('-${bdt(summary['commissionBdt'] ?? 0)}')]),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Platform Commission (${summary['commissionRatePct'] ?? 15}%)',
+                      ),
+                      Text('-${bdt(summary['commissionBdt'] ?? 0)}'),
+                    ],
+                  ),
                   const Divider(),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Destination Account'), Text('${payoutAccount?['provider'] ?? 'Bank'} · ${payoutAccount?['maskedAccount'] ?? 'Primary'}')]),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Destination Account'),
+                      Text(
+                        '${payoutAccount?['provider'] ?? 'Bank'} · ${payoutAccount?['maskedAccount'] ?? 'Primary'}',
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 14),
-          const Text('Itemized Statement Breakdown', style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text(
+            'Itemized Statement Breakdown',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
           if (transactions.isEmpty)
-            const Card(child: Padding(padding: EdgeInsets.all(14), child: Text('No settled orders in this cycle yet.')))
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(14),
+                child: Text('No settled orders in this cycle yet.'),
+              ),
+            )
           else
-            ...transactions.map((tx) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(tx['description']?.toString() ?? 'Delivered Order Settlement'),
-                    subtitle: Text(tx['txType']?.toString() ?? ''),
-                    trailing: Text(bdt(tx['amountBdt'] ?? 0), style: const TextStyle(fontWeight: FontWeight.w800, color: TwoBeeColors.primary)),
+            ...transactions.map(
+              (tx) => Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  title: Text(
+                    tx['description']?.toString() ??
+                        'Delivered Order Settlement',
                   ),
-                )),
+                  subtitle: Text(tx['txType']?.toString() ?? ''),
+                  trailing: Text(
+                    bdt(tx['amountBdt'] ?? 0),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: TwoBeeColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('PDF Statement generated cleanly (/api/v1/merchant/panel/wallet/statement-pdf)')),
+              const SnackBar(
+                content: Text(
+                  'PDF Statement generated cleanly (/api/v1/merchant/panel/wallet/statement-pdf)',
+                ),
+              ),
             ),
             icon: const Icon(Icons.picture_as_pdf_outlined),
             label: const Text('Download Statement PDF'),
@@ -1808,34 +2848,61 @@ class _MerchantPromotionsScreenState
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Offer Title')),
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(labelText: 'Offer Title'),
+              ),
               const SizedBox(height: 8),
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Promo Code')),
+              TextField(
+                controller: codeCtrl,
+                decoration: const InputDecoration(labelText: 'Promo Code'),
+              ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: type,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: const [
-                  DropdownMenuItem(value: 'FLAT_BDT', child: Text('Flat ৳ Discount')),
-                  DropdownMenuItem(value: 'PERCENTAGE', child: Text('Percentage %')),
-                  DropdownMenuItem(value: 'FREE_DELIVERY', child: Text('Free Delivery')),
+                  DropdownMenuItem(
+                    value: 'FLAT_BDT',
+                    child: Text('Flat ৳ Discount'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'PERCENTAGE',
+                    child: Text('Percentage %'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'FREE_DELIVERY',
+                    child: Text('Free Delivery'),
+                  ),
                 ],
                 onChanged: (v) => setS(() => type = v ?? 'FLAT_BDT'),
               ),
               const SizedBox(height: 8),
-              TextField(controller: valCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Discount Value')),
+              TextField(
+                controller: valCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Discount Value'),
+              ),
             ],
           ),
           actions: [
             ElevatedButton(
               onPressed: () async {
-                final token = ref.read(authControllerProvider).merchantRoleToken;
-                await ref.read(apiClientProvider).post('/merchant/panel/promotions', roleToken: token, body: {
-                  'title': titleCtrl.text.trim(),
-                  'promoCode': codeCtrl.text.trim(),
-                  'discountType': type,
-                  'discountValue': double.tryParse(valCtrl.text) ?? 50,
-                });
+                final token = ref
+                    .read(authControllerProvider)
+                    .merchantRoleToken;
+                await ref
+                    .read(apiClientProvider)
+                    .post(
+                      '/merchant/panel/promotions',
+                      roleToken: token,
+                      body: {
+                        'title': titleCtrl.text.trim(),
+                        'promoCode': codeCtrl.text.trim(),
+                        'discountType': type,
+                        'discountValue': double.tryParse(valCtrl.text) ?? 50,
+                      },
+                    );
                 if (ctx.mounted) Navigator.pop(ctx);
                 _load();
               },
@@ -1850,7 +2917,10 @@ class _MerchantPromotionsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Promotions & Offers'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Promotions & Offers'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: TwoBeeColors.primary,
         foregroundColor: Colors.white,
@@ -1907,17 +2977,29 @@ class _MerchantReviewsScreenState extends ConsumerState<MerchantReviewsScreen> {
   }
 
   Future<void> _replyDialog(String reviewId) async {
-    final replyCtrl = TextEditingController(text: 'Thank you for ordering from us!');
+    final replyCtrl = TextEditingController(
+      text: 'Thank you for ordering from us!',
+    );
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reply to Customer Review'),
-        content: TextField(controller: replyCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Public Response')),
+        content: TextField(
+          controller: replyCtrl,
+          maxLines: 3,
+          decoration: const InputDecoration(labelText: 'Public Response'),
+        ),
         actions: [
           ElevatedButton(
             onPressed: () async {
               final token = ref.read(authControllerProvider).merchantRoleToken;
-              await ref.read(apiClientProvider).post('/merchant/panel/reviews/$reviewId/reply', roleToken: token, body: {'reply': replyCtrl.text.trim()});
+              await ref
+                  .read(apiClientProvider)
+                  .post(
+                    '/merchant/panel/reviews/$reviewId/reply',
+                    roleToken: token,
+                    body: {'reply': replyCtrl.text.trim()},
+                  );
               if (ctx.mounted) Navigator.pop(ctx);
               _load();
             },
@@ -1931,7 +3013,10 @@ class _MerchantReviewsScreenState extends ConsumerState<MerchantReviewsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Customer Reviews'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Customer Reviews'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: _reviews.isEmpty
           ? const Center(child: Text('No customer reviews yet.'))
           : ListView(
@@ -1948,8 +3033,15 @@ class _MerchantReviewsScreenState extends ConsumerState<MerchantReviewsScreen> {
                           '${r['comment'] ?? ''}\n${r['merchantReply'] != null ? 'Reply: ${r['merchantReply']}' : ''}',
                         ),
                         trailing: r['merchantReply'] == null
-                            ? TextButton(onPressed: () => _replyDialog(r['id'] as String), child: const Text('Reply'))
-                            : const Icon(Icons.check_circle_outline, color: TwoBeeColors.primary),
+                            ? TextButton(
+                                onPressed: () =>
+                                    _replyDialog(r['id'] as String),
+                                child: const Text('Reply'),
+                              )
+                            : const Icon(
+                                Icons.check_circle_outline,
+                                color: TwoBeeColors.primary,
+                              ),
                       ),
                     ),
                   )
@@ -1986,7 +3078,9 @@ class _MerchantSecurityScreenState
   Future<void> _load() async {
     final token = ref.read(authControllerProvider).merchantRoleToken;
     if (token == null) return;
-    final res = await ref.read(apiClientProvider).get('/merchant/panel/store', roleToken: token);
+    final res = await ref
+        .read(apiClientProvider)
+        .get('/merchant/panel/store', roleToken: token);
     if (mounted) setState(() => _storeInfo = res);
   }
 
@@ -1996,7 +3090,10 @@ class _MerchantSecurityScreenState
     final devices = (_storeInfo?['devices'] as List?) ?? [];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Security & 6-Digit PIN'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Security & 6-Digit PIN'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -2005,7 +3102,9 @@ class _MerchantSecurityScreenState
             child: ListTile(
               leading: Icon(Icons.shield_outlined, color: TwoBeeColors.primary),
               title: Text('6-Digit Passcode + 15-min Auto-Lock'),
-              subtitle: Text('Critical Payout Guard: Changing payout wallet requires SMS OTP + 48-hour hold.'),
+              subtitle: Text(
+                'Critical Payout Guard: Changing payout wallet requires SMS OTP + 48-hour hold.',
+              ),
             ),
           ),
           if (payout?['pendingEffectiveAt'] != null)
@@ -2013,11 +3112,15 @@ class _MerchantSecurityScreenState
               padding: const EdgeInsets.only(top: 10),
               child: VerificationBanner(
                 title: '48-Hour Payout Hold Active',
-                subtitle: 'Pending change takes effect at ${payout!['pendingEffectiveAt']}',
+                subtitle:
+                    'Pending change takes effect at ${payout!['pendingEffectiveAt']}',
               ),
             ),
           const SizedBox(height: 16),
-          const Text('Change 6-Digit Passcode', style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text(
+            'Change 6-Digit Passcode',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _curPin,
@@ -2057,19 +3160,40 @@ class _MerchantSecurityScreenState
             child: const Text('Update 6-Digit Passcode'),
           ),
           const SizedBox(height: 20),
-          const Text('Request Payout Account Change (OTP + 48h Hold)', style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text(
+            'Request Payout Account Change (OTP + 48h Hold)',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () async {
-              final phone = ref.read(authControllerProvider).user?['phone'] as String;
-              final res = await ref.read(apiClientProvider).post('/auth/otp/request', body: {'phone': phone, 'purpose': 'PAYOUT_CHANGE'});
-              if (res['devOtpHint'] != null) _otpCtrl.text = res['devOtpHint'] as String;
-              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SMS OTP requested for payout change')));
+              final phone =
+                  ref.read(authControllerProvider).user?['phone'] as String;
+              final res = await ref
+                  .read(apiClientProvider)
+                  .post(
+                    '/auth/otp/request',
+                    body: {'phone': phone, 'purpose': 'PAYOUT_CHANGE'},
+                  );
+              if (res['devOtpHint'] != null) {
+                _otpCtrl.text = res['devOtpHint'] as String;
+              }
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('SMS OTP requested for payout change'),
+                  ),
+                );
+              }
             },
             child: const Text('Send Payout Verification OTP'),
           ),
           const SizedBox(height: 8),
-          TextField(controller: _otpCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '6-digit SMS OTP')),
+          TextField(
+            controller: _otpCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: '6-digit SMS OTP'),
+          ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             initialValue: _provider,
@@ -2082,41 +3206,75 @@ class _MerchantSecurityScreenState
             onChanged: (v) => setState(() => _provider = v ?? 'BKASH'),
           ),
           const SizedBox(height: 8),
-          TextField(controller: _payoutNoCtrl, decoration: const InputDecoration(labelText: 'New Wallet / Account Number')),
+          TextField(
+            controller: _payoutNoCtrl,
+            decoration: const InputDecoration(
+              labelText: 'New Wallet / Account Number',
+            ),
+          ),
           const SizedBox(height: 8),
-          TextField(controller: _holderCtrl, decoration: const InputDecoration(labelText: 'Holder Name (Match NID)')),
+          TextField(
+            controller: _holderCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Holder Name (Match NID)',
+            ),
+          ),
           const SizedBox(height: 10),
           ElevatedButton(
             onPressed: () async {
               final token = ref.read(authControllerProvider).merchantRoleToken;
-              await ref.read(apiClientProvider).post('/merchant/panel/payout/change-request', roleToken: token, body: {
-                'otpCode': _otpCtrl.text.trim(),
-                'provider': _provider,
-                'accountNumber': _payoutNoCtrl.text.trim(),
-                'holderName': _holderCtrl.text.trim(),
-              });
+              await ref
+                  .read(apiClientProvider)
+                  .post(
+                    '/merchant/panel/payout/change-request',
+                    roleToken: token,
+                    body: {
+                      'otpCode': _otpCtrl.text.trim(),
+                      'provider': _provider,
+                      'accountNumber': _payoutNoCtrl.text.trim(),
+                      'holderName': _holderCtrl.text.trim(),
+                    },
+                  );
               _load();
-              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Submitted! 48-hour security hold active.')));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Submitted! 48-hour security hold active.'),
+                  ),
+                );
+              }
             },
             child: const Text('Submit Payout Change (48h Hold)'),
           ),
           if (devices.isNotEmpty) ...[
             const SizedBox(height: 20),
-            const Text('Authorized Devices', style: TextStyle(fontWeight: FontWeight.w800)),
-            ...devices.map((d) => Card(
-                  margin: const EdgeInsets.only(top: 8),
-                  child: ListTile(
-                    title: Text(d['deviceName'].toString()),
-                    trailing: TextButton(
-                      onPressed: () async {
-                        final token = ref.read(authControllerProvider).merchantRoleToken;
-                        await ref.read(apiClientProvider).delete('/merchant/panel/security/devices/${d['id']}', roleToken: token);
-                        _load();
-                      },
-                      child: const Text('Remove'),
-                    ),
+            const Text(
+              'Authorized Devices',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            ...devices.map(
+              (d) => Card(
+                margin: const EdgeInsets.only(top: 8),
+                child: ListTile(
+                  title: Text(d['deviceName'].toString()),
+                  trailing: TextButton(
+                    onPressed: () async {
+                      final token = ref
+                          .read(authControllerProvider)
+                          .merchantRoleToken;
+                      await ref
+                          .read(apiClientProvider)
+                          .delete(
+                            '/merchant/panel/security/devices/${d['id']}',
+                            roleToken: token,
+                          );
+                      _load();
+                    },
+                    child: const Text('Remove'),
                   ),
-                )),
+                ),
+              ),
+            ),
           ],
         ],
       ),

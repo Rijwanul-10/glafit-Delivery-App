@@ -73,15 +73,74 @@ class PinDigitsRow extends StatelessWidget {
               decoration: BoxDecoration(
                 color: TwoBeeColors.surfaceCard,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.35)),
+                border: Border.all(color: TwoBeeColors.primary, width: 1.5),
               ),
               child: Text(
                 c,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: TwoBeeColors.primary),
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: TwoBeeColors.primaryDark),
               ),
             ),
           )
           .toList(),
+    );
+  }
+}
+
+/// High-contrast 4-digit PIN entry field used across Rider pickup/handover flows.
+class PinInputBox extends StatelessWidget {
+  final TextEditingController controller;
+  final int maxLength;
+  final String hintText;
+
+  const PinInputBox({
+    super.key,
+    required this.controller,
+    this.maxLength = 4,
+    this.hintText = '• • • •',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      maxLength: maxLength,
+      keyboardType: TextInputType.number,
+      textAlign: TextAlign.center,
+      cursorColor: TwoBeeColors.primaryDark,
+      style: const TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 10,
+        color: TwoBeeColors.textPrimary,
+      ),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: const TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 8,
+          color: TwoBeeColors.textMuted,
+        ),
+        counterStyle: const TextStyle(
+          color: TwoBeeColors.textSecondary,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+        filled: true,
+        fillColor: TwoBeeColors.surfaceCard,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: TwoBeeColors.primary, width: 1.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: TwoBeeColors.primary, width: 1.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: TwoBeeColors.primaryDark, width: 2.2),
+        ),
+      ),
     );
   }
 }
@@ -180,7 +239,11 @@ class PasscodePad extends StatelessWidget {
               height: 16,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: filled ? TwoBeeColors.primary : TwoBeeColors.borderSoft,
+                color: filled ? TwoBeeColors.primary : TwoBeeColors.surfaceCard,
+                border: Border.all(
+                  color: filled ? TwoBeeColors.primaryDark : TwoBeeColors.textMuted.withValues(alpha: 0.45),
+                  width: 1.5,
+                ),
               ),
             );
           }),
@@ -246,7 +309,7 @@ class _KeyButton extends StatelessWidget {
               border: Border.all(color: TwoBeeColors.borderSoft),
             ),
             child: label != null
-                ? Text(label!, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600))
+                ? Text(label!, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: TwoBeeColors.textPrimary))
                 : Icon(icon, color: tint ?? TwoBeeColors.textPrimary),
           ),
         ),
@@ -500,29 +563,36 @@ class TwoBeeMapPreview extends StatelessWidget {
         ),
     ];
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        height: height,
-        child: FlutterMap(
-          options: MapOptions(initialCenter: center, initialZoom: 12.8),
-          children: [
-            TileLayer(
-              urlTemplate: AppConfig.mapTileUrl,
-              userAgentPackageName: 'app.twobee.mobile',
-            ),
-            if (dropoffLat != null && dropoffLng != null)
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: [LatLng(pickupLat, pickupLng), LatLng(dropoffLat!, dropoffLng!)],
-                    strokeWidth: 4,
-                    color: TwoBeeColors.primary,
-                  ),
-                ],
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: TwoBeeRadii.card,
+        border: Border.all(color: TwoBeeColors.borderSoft),
+        boxShadow: TwoBeeShadows.softCard,
+      ),
+      child: ClipRRect(
+        borderRadius: TwoBeeRadii.card,
+        child: SizedBox(
+          height: height,
+          child: FlutterMap(
+            options: MapOptions(initialCenter: center, initialZoom: 12.8),
+            children: [
+              TileLayer(
+                urlTemplate: AppConfig.mapTileUrl,
+                userAgentPackageName: 'app.twobee.mobile',
               ),
-            MarkerLayer(markers: markers),
-          ],
+              if (dropoffLat != null && dropoffLng != null)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: [LatLng(pickupLat, pickupLng), LatLng(dropoffLat!, dropoffLng!)],
+                      strokeWidth: 4,
+                      color: TwoBeeColors.primary,
+                    ),
+                  ],
+                ),
+              MarkerLayer(markers: markers),
+            ],
+          ),
         ),
       ),
     );

@@ -65,6 +65,34 @@ describe('2Bee Super-App Backend E2E Specification Tests', () => {
     const auth = await loginPhone('+8801711111111');
     expect(auth.accessToken).toBeTruthy();
 
+    // New phone number triggers short profile setup and saves User profile
+    const newPhone = '+8801911223344';
+    const reqNew = await request(app).post('/api/v1/auth/otp/request').send({ phone: newPhone, purpose: 'LOGIN' });
+    expect(reqNew.status).toBe(200);
+    expect(reqNew.body.isNewUser).toBe(true);
+    expect(reqNew.body.needsProfileSetup).toBe(true);
+
+    const verNew = await request(app)
+      .post('/api/v1/auth/otp/verify')
+      .send({ phone: newPhone, code: reqNew.body.devOtpHint ?? '123456', purpose: 'LOGIN' });
+    expect(verNew.status).toBe(200);
+    expect(verNew.body.isNewUser).toBe(true);
+    expect(verNew.body.needsProfileSetup).toBe(true);
+
+    const complete = await request(app)
+      .post('/api/v1/auth/profile/complete')
+      .set('Authorization', `Bearer ${verNew.body.accessToken}`)
+      .send({ fullName: 'Farhan Sadik', email: 'farhan@example.com' });
+    expect(complete.status).toBe(200);
+    expect(complete.body.needsProfileSetup).toBe(false);
+    expect(complete.body.user.fullName).toBe('Farhan Sadik');
+    expect(complete.body.user.email).toBe('farhan@example.com');
+
+    const reqReturning = await request(app).post('/api/v1/auth/otp/request').send({ phone: newPhone, purpose: 'LOGIN' });
+    expect(reqReturning.status).toBe(200);
+    expect(reqReturning.body.isNewUser).toBe(false);
+    expect(reqReturning.body.needsProfileSetup).toBe(false);
+
     const methods = await request(app).get('/api/v1/common/payment-methods');
     expect(methods.status).toBe(200);
     expect(methods.body.workingMethods.map((m: { code: string }) => m.code)).toEqual(['COD', 'STRIPE_SANDBOX']);
@@ -580,5 +608,80 @@ describe('2Bee Super-App Backend E2E Specification Tests', () => {
     expect(received.lat).toBeCloseTo(23.7955, 3);
     clientSocket.disconnect();
     riderSocket.disconnect();
+  });
+
+  it('exposes health adapters, FCM token sync, storage upload, and Admin auth/overview/pricing/CSV reports', async () => {
+    const health = await request(app).get('/health');
+    expect(health.status).toBe(200);
+    expect(health.body.ok).toBe(true);
+    expect(health.body.storageProvider).toBe('local');
+    expect(health.body.smsProvider).toBe('mock');
+    expect(health.body.mapsProvider).toBe('osm');
+    expect(health.body.firebaseConfigured).toBe(false);
+    expect(health.body.fcmEnabled).toBe(false);
+
+    const client = await loginPhone('+8801711111111');
+
+    const fcmSave = await request(app)
+      .post('/api/v1/common/fcm-token')
+      .set('Authorization', `Bearer ${client.accessToken}`)
+      .send({
+        token: 'e2e-fcm-device-token-123456',
+        role: 'CLIENT',
+        platform: 'ANDROID',
+      });
+    expect(fcmSave.status).toBe(200);
+    expect(fcmSave.body.ok).toBe(true);
+    expect(fcmSave.body.id).toBeTruthy();
+
+    const fcmDelete = await request(app)
+      .delete('/api/v1/common/fcm-token')
+      .set('Authorization', `Bearer ${client.accessToken}`)
+      .send({ token: 'e2e-fcm-device-token-123456' });
+    expect(fcmDelete.status).toBe(200);
+    expect(fcmDelete.body.ok).toBe(true);
+
+    const uploadRes = await request(app)
+      .post('/api/v1/common/uploads')
+      .set('Authorization', `Bearer ${client.accessToken}`)
+      .attach('file', Buffer.from('2bee-e2e-file'), 'sample.txt');
+    expect(uploadRes.status).toBe(201);
+    expect(uploadRes.body.ok).toBe(true);
+    expect(uploadRes.body.storageProvider).toBe('local');
+    expect(uploadRes.body.url).toContain('/uploads/');
+
+    const badAdminLogin = await request(app).post('/api/v1/admin/auth/login').send({
+      email: env.adminSeedEmail,
+      password: 'WrongPassword!',
+    });
+    expect(badAdminLogin.status).toBe(401);
+
+    const adminLogin = await request(app).post('/api/v1/admin/auth/login').send({
+      email: env.adminSeedEmail,
+      password: env.adminSeedPassword,
+    });
+    expect(adminLogin.status).toBe(200);
+    expect(adminLogin.body.accessToken).toBeTruthy();
+    const adminToken = adminLogin.body.accessToken as string;
+
+    const overview = await request(app)
+      .get('/api/v1/admin/overview')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(overview.status).toBe(200);
+    expect(overview.body.kpis.totalUsers).toBeGreaterThanOrEqual(1);
+
+    const pricingPatch = await request(app)
+      .patch('/api/v1/admin/pricing')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ foodDeliveryFeeBdt: 40 });
+    expect(pricingPatch.status).toBe(200);
+    expect(pricingPatch.body.pricing.foodDeliveryFeeBdt).toBe(40);
+
+    const csvReport = await request(app)
+      .get('/api/v1/admin/reports/revenue?format=csv')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(csvReport.status).toBe(200);
+    expect(String(csvReport.headers['content-type'])).toContain('text/csv');
+    expect(csvReport.text.length).toBeGreaterThan(0);
   });
 });
