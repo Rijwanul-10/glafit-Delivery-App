@@ -68,6 +68,7 @@ export const h3IndexStrategy: H3IndexStrategy = {
 class GeoMatchService {
   private redis: Redis | null = null;
   private redisReady = false;
+  private lastError: string | null = null;
 
   // In-memory store mirroring Redis GEO + H3 Q6 buckets + 30s heartbeat TTL + Zone A->B Sets
   private memCoords = new Map<
@@ -81,22 +82,42 @@ class GeoMatchService {
   private memMultiServiceParcels = new Map<string, ActiveMultiServiceSlot>(); // riderId -> slot
 
   async init(): Promise<void> {
-    if (env.geoBackend === 'memory' || !env.redisUrl) {
+    if (env.geoBackend === 'memory') {
+      this.lastError = 'GEO_BACKEND=memory forced';
+      return;
+    }
+    if (!env.redisUrl || !env.redisUrl.trim()) {
+      this.lastError = 'REDIS_URL is empty';
+      return;
+    }
+    let cleanUrl = env.redisUrl.trim().replace(/^["']|["']$/g, '').trim();
+    const cliMatch = cleanUrl.match(/(rediss?:\/\/\S+)/i);
+    if (cliMatch?.[1]) {
+      cleanUrl = cliMatch[1].replace(/^["']|["']$/g, '');
+    }
+    if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+      this.lastError = 'Invalid REDIS_URL scheme (https REST URL pasted instead of rediss:// TCP URL)';
+      console.warn('[2Bee GeoMatchService]', this.lastError);
       return;
     }
     try {
-      const isTls = env.redisUrl.startsWith('rediss://');
-      const client = new Redis(env.redisUrl, {
+      const normalizedUrl = cleanUrl.includes('upstash.io') && cleanUrl.startsWith('redis://')
+        ? cleanUrl.replace(/^redis:\/\//, 'rediss://')
+        : cleanUrl;
+      const isTls = normalizedUrl.startsWith('rediss://');
+      const client = new Redis(normalizedUrl, {
         maxRetriesPerRequest: 2,
-        connectTimeout: 5000,
+        connectTimeout: 8000,
         lazyConnect: true,
         ...(isTls ? { tls: { rejectUnauthorized: false } } : {}),
       });
       client.on('error', (err) => {
+        this.lastError = err.message;
         console.warn('[2Bee GeoMatchService] Redis connection warning:', err.message);
       });
       client.on('ready', () => {
         this.redisReady = true;
+        this.lastError = null;
       });
       client.on('end', () => {
         this.redisReady = false;
@@ -105,15 +126,21 @@ class GeoMatchService {
       await client.ping();
       this.redis = client;
       this.redisReady = true;
+      this.lastError = null;
       console.info(`[2Bee GeoMatchService] Connected to Redis GEO + H3 Q${env.h3Resolution} Honeycomb backend`);
     } catch (err) {
-      console.warn('[2Bee GeoMatchService] Redis unreachable; using in-memory GEO fallback:', (err as Error).message);
+      this.lastError = (err as Error).message;
+      console.warn('[2Bee GeoMatchService] Redis unreachable; using in-memory GEO fallback:', this.lastError);
       this.redisReady = false;
     }
   }
 
   getEngineName(): 'redis-geo' | 'memory-geo-fallback' {
     return this.redisReady && this.redis ? 'redis-geo' : 'memory-geo-fallback';
+  }
+
+  getLastError(): string | null {
+    return this.lastError;
   }
 
   async updateRiderLocation(
