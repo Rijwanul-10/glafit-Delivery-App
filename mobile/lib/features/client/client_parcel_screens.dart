@@ -1083,26 +1083,61 @@ class ParcelTrackingScreen extends ConsumerStatefulWidget {
 
 class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
   Map<String, dynamic>? _shipment;
+  double? _riderLat;
+  double? _riderLng;
   bool _loading = true;
+  late final SocketService _sock;
+
+  void _onTrackingLocation(dynamic data) {
+    if (!mounted || data is! Map) return;
+    if (data['orderId'] != null && data['orderId'] != widget.parcelId) return;
+    final lat = (data['lat'] as num?)?.toDouble();
+    final lng = (data['lng'] as num?)?.toDouble();
+    if (lat != null && lng != null) {
+      setState(() {
+        _riderLat = lat;
+        _riderLng = lng;
+      });
+    }
+  }
+
+  void _onParcelStatus(dynamic _) {
+    if (mounted) _load();
+  }
 
   @override
   void initState() {
     super.initState();
+    _sock = ref.read(socketServiceProvider);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _load();
     });
-    final sock = ref.read(socketServiceProvider);
-    sock.joinTracking('parcel', widget.parcelId);
-    sock.socket?.off('parcel:status');
-    sock.socket?.on('parcel:status', (_) {
-      if (mounted) _load();
-    });
+    _sock.joinTracking('parcel', widget.parcelId);
+    _sock.socket?.off('parcel:status', _onParcelStatus);
+    _sock.socket?.off('tracking:location', _onTrackingLocation);
+    _sock.socket?.on('parcel:status', _onParcelStatus);
+    _sock.socket?.on('tracking:location', _onTrackingLocation);
+  }
+
+  @override
+  void dispose() {
+    _sock.socket?.off('parcel:status', _onParcelStatus);
+    _sock.socket?.off('tracking:location', _onTrackingLocation);
+    _sock.leaveTracking('parcel', widget.parcelId);
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
       final res = await ref.read(apiClientProvider).get('/parcels/${widget.parcelId}');
-      setState(() => _shipment = Map<String, dynamic>.from(res['shipment'] as Map));
+      final s = Map<String, dynamic>.from(res['shipment'] as Map);
+      final courier = s['courier'] as Map?;
+      if (!mounted) return;
+      setState(() {
+        _shipment = s;
+        _riderLat ??= (courier?['lat'] as num?)?.toDouble();
+        _riderLng ??= (courier?['lng'] as num?)?.toDouble();
+      });
     } catch (_) {
       // transient
     } finally {
@@ -1197,8 +1232,16 @@ class _ParcelTrackingScreenState extends ConsumerState<ParcelTrackingScreen> {
               flexibleSpace: FlexibleSpaceBar(
                 background: Stack(
                   children: [
-                    const Positioned.fill(
-                      child: TwoBeeMapPreview(height: 250),
+                    Positioned.fill(
+                      child: TwoBeeMapPreview(
+                        pickupLat: (s['pickupLat'] as num?)?.toDouble() ?? 23.7937,
+                        pickupLng: (s['pickupLng'] as num?)?.toDouble() ?? 90.4066,
+                        dropoffLat: (s['dropoffLat'] as num?)?.toDouble() ?? 23.8726,
+                        dropoffLng: (s['dropoffLng'] as num?)?.toDouble() ?? 90.3983,
+                        riderLat: _riderLat ?? (courier?['lat'] as num?)?.toDouble(),
+                        riderLng: _riderLng ?? (courier?['lng'] as num?)?.toDouble(),
+                        height: 250,
+                      ),
                     ),
                     // Ambient gradient overlay
                     Positioned(
@@ -1759,27 +1802,67 @@ class _ReceiverParcelTrackingScreenState extends ConsumerState<ReceiverParcelTra
     },
   };
 
+  double? _riderLat;
+  double? _riderLng;
+  late final SocketService _sock;
+
+  void _onTrackingLocation(dynamic data) {
+    if (!mounted || data is! Map) return;
+    if (data['orderId'] != null && data['orderId'] != widget.parcelId) return;
+    final lat = (data['lat'] as num?)?.toDouble();
+    final lng = (data['lng'] as num?)?.toDouble();
+    if (lat != null && lng != null) {
+      setState(() {
+        _riderLat = lat;
+        _riderLng = lng;
+      });
+    }
+  }
+
+  void _onParcelStatus(dynamic _) {
+    if (mounted) _load();
+  }
+
+  void _onParcelDelivered(dynamic _) {
+    if (mounted) {
+      setState(() => _isDelivered = true);
+      showAutoDismissToast(context, '🎉 Parcel #${_shipment?['trackingCode'] ?? ''} Received Successfully!', duration: const Duration(seconds: 4));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _sock = ref.read(socketServiceProvider);
     _load();
-    final sock = ref.read(socketServiceProvider);
-    sock.joinTracking('parcel', widget.parcelId);
-    sock.socket?.on('parcel:status', (_) => _load());
-    sock.socket?.on('parcel:delivered', (_) {
-      if (mounted) {
-        setState(() => _isDelivered = true);
-        showAutoDismissToast(context, '🎉 Parcel #${_shipment?['trackingCode'] ?? ''} Received Successfully!', duration: const Duration(seconds: 4));
-      }
-    });
+    _sock.joinTracking('parcel', widget.parcelId);
+    _sock.socket?.off('parcel:status', _onParcelStatus);
+    _sock.socket?.off('parcel:delivered', _onParcelDelivered);
+    _sock.socket?.off('tracking:location', _onTrackingLocation);
+    _sock.socket?.on('parcel:status', _onParcelStatus);
+    _sock.socket?.on('parcel:delivered', _onParcelDelivered);
+    _sock.socket?.on('tracking:location', _onTrackingLocation);
+  }
+
+  @override
+  void dispose() {
+    _sock.socket?.off('parcel:status', _onParcelStatus);
+    _sock.socket?.off('parcel:delivered', _onParcelDelivered);
+    _sock.socket?.off('tracking:location', _onTrackingLocation);
+    _sock.leaveTracking('parcel', widget.parcelId);
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
       final res = await ref.read(apiClientProvider).get('/parcels/${widget.parcelId}');
       if (mounted) {
+        final s = Map<String, dynamic>.from(res['shipment'] as Map);
+        final courier = s['courier'] as Map?;
         setState(() {
-          _shipment = Map<String, dynamic>.from(res['shipment'] as Map);
+          _shipment = s;
+          _riderLat ??= (courier?['lat'] as num?)?.toDouble();
+          _riderLng ??= (courier?['lng'] as num?)?.toDouble();
           if (widget.isDeliveredHistory || _shipment!['status'] == 'DELIVERED') {
             _isDelivered = true;
           }
@@ -1860,12 +1943,12 @@ class _ReceiverParcelTrackingScreenState extends ConsumerState<ReceiverParcelTra
           children: [
             // Live map showing where parcel is
             TwoBeeMapPreview(
-              pickupLat: 23.7937,
-              pickupLng: 90.4066,
-              dropoffLat: 23.8690,
-              dropoffLng: 90.3980,
-              riderLat: (courier['lat'] as num?)?.toDouble() ?? 23.8200,
-              riderLng: (courier['lng'] as num?)?.toDouble() ?? 90.4100,
+              pickupLat: (s['pickupLat'] as num?)?.toDouble() ?? 23.7937,
+              pickupLng: (s['pickupLng'] as num?)?.toDouble() ?? 90.4066,
+              dropoffLat: (s['dropoffLat'] as num?)?.toDouble() ?? 23.8690,
+              dropoffLng: (s['dropoffLng'] as num?)?.toDouble() ?? 90.3980,
+              riderLat: _riderLat ?? (courier['lat'] as num?)?.toDouble() ?? 23.8200,
+              riderLng: _riderLng ?? (courier['lng'] as num?)?.toDouble() ?? 90.4100,
               height: 220,
             ),
             const SizedBox(height: 14),

@@ -373,6 +373,18 @@ panel.post(
     const svcObj = (rp.activeServicesJson as Record<string, boolean>) ?? { food: true, parcel: true, ride: true };
     const keys = (['food', 'parcel', 'ride'] as DispatchServiceKey[]).filter((k) => svcObj[k]);
     const geoRes = await geoMatchService.updateRiderLocation(rp.id, lat, lng, keys);
+    const io = getIO();
+    if (io) {
+      const [activeRide, activeParcel, activeFood] = await Promise.all([
+        prisma.rideTrip.findFirst({ where: { riderId: rp.id, status: { in: ['RIDER_ASSIGNED', 'ARRIVED_PICKUP', 'ON_TRIP'] } }, select: { id: true } }),
+        prisma.parcelShipment.findFirst({ where: { riderId: rp.id, status: { in: ['RIDER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'] } }, select: { id: true } }),
+        prisma.foodOrder.findFirst({ where: { riderId: rp.id, status: { in: ['READY_FOR_PICKUP', 'PICKED_UP'] } }, select: { id: true } }),
+      ]);
+      const payload = { lat, lng, updatedAt: new Date().toISOString() };
+      if (activeRide) io.to(`tracking:ride:${activeRide.id}`).emit('tracking:location', { ...payload, orderId: activeRide.id });
+      if (activeParcel) io.to(`tracking:parcel:${activeParcel.id}`).emit('tracking:location', { ...payload, orderId: activeParcel.id });
+      if (activeFood) io.to(`tracking:food:${activeFood.id}`).emit('tracking:location', { ...payload, orderId: activeFood.id });
+    }
     res.json({ ok: true, ...geoRes });
   }),
 );

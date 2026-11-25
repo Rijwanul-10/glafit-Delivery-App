@@ -20,6 +20,12 @@ class SocketService {
   io.Socket? _socket;
   io.Socket? get socket => _socket;
 
+  String? _userId;
+  String? _riderId;
+  String? _merchantId;
+  final Set<String> _trackingRooms = <String>{};
+  final Set<String> _chatThreads = <String>{};
+
   void connect(String? token) {
     _socket?.dispose();
     _socket = io.io(
@@ -27,21 +33,60 @@ class SocketService {
       io.OptionBuilder()
           .setTransports(['websocket', 'polling'])
           .setAuth(token != null ? {'token': token} : {})
+          .enableReconnection()
+          .setReconnectionAttempts(999999)
+          .setReconnectionDelay(1500)
           .disableAutoConnect()
           .build(),
     );
+    _socket!.onConnect((_) => _rejoinRooms());
+    _socket!.onReconnect((_) => _rejoinRooms());
     _socket!.connect();
   }
 
-  void joinUser(String userId) => _socket?.emit('join:user', userId);
-  void joinRider(String riderId) => _socket?.emit('join:rider', riderId);
-  void joinMerchant(String merchantId) => _socket?.emit('join:merchant', merchantId);
+  void _rejoinRooms() {
+    if (_userId != null) _socket?.emit('join:user', _userId);
+    if (_riderId != null) _socket?.emit('join:rider', _riderId);
+    if (_merchantId != null) _socket?.emit('join:merchant', _merchantId);
+    for (final room in _trackingRooms) {
+      final parts = room.split(':');
+      if (parts.length == 2) {
+        _socket?.emit('join:tracking', {'serviceType': parts[0], 'orderId': parts[1]});
+      }
+    }
+    for (final threadId in _chatThreads) {
+      _socket?.emit('join:chat', threadId);
+    }
+  }
+
+  void joinUser(String userId) {
+    _userId = userId;
+    _socket?.emit('join:user', userId);
+  }
+
+  void joinRider(String riderId) {
+    _riderId = riderId;
+    _socket?.emit('join:rider', riderId);
+  }
+
+  void joinMerchant(String merchantId) {
+    _merchantId = merchantId;
+    _socket?.emit('join:merchant', merchantId);
+  }
 
   void joinTracking(String serviceType, String orderId) {
+    _trackingRooms.add('$serviceType:$orderId');
     _socket?.emit('join:tracking', {'serviceType': serviceType, 'orderId': orderId});
   }
 
-  void joinChat(String threadId) => _socket?.emit('join:chat', threadId);
+  void leaveTracking(String serviceType, String orderId) {
+    _trackingRooms.remove('$serviceType:$orderId');
+  }
+
+  void joinChat(String threadId) {
+    _chatThreads.add(threadId);
+    _socket?.emit('join:chat', threadId);
+  }
 
   void streamRiderLocation({
     required String riderId,
@@ -63,6 +108,8 @@ class SocketService {
   }
 
   void dispose() {
+    _trackingRooms.clear();
+    _chatThreads.clear();
     _socket?.dispose();
     _socket = null;
   }

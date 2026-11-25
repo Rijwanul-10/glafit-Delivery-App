@@ -2081,17 +2081,55 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
   double? _riderLat;
   double? _riderLng;
   bool _loading = true;
+  late final SocketService _sock;
+
+  void _onOrderStatus(dynamic _) {
+    if (mounted) _load();
+  }
+
+  void _onTrackingLocation(dynamic data) {
+    if (!mounted || data is! Map) return;
+    if (data['orderId'] != null && data['orderId'] != widget.orderId) return;
+    final lat = (data['lat'] as num?)?.toDouble();
+    final lng = (data['lng'] as num?)?.toDouble();
+    if (lat != null && lng != null) {
+      setState(() {
+        _riderLat = lat;
+        _riderLng = lng;
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _sock = ref.read(socketServiceProvider);
     _load();
+    _sock.joinTracking('food', widget.orderId);
+    _sock.socket?.off('order:status', _onOrderStatus);
+    _sock.socket?.off('tracking:location', _onTrackingLocation);
+    _sock.socket?.on('order:status', _onOrderStatus);
+    _sock.socket?.on('tracking:location', _onTrackingLocation);
+  }
+
+  @override
+  void dispose() {
+    _sock.socket?.off('order:status', _onOrderStatus);
+    _sock.socket?.off('tracking:location', _onTrackingLocation);
+    _sock.leaveTracking('food', widget.orderId);
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
       final res = await ref.read(apiClientProvider).get('/food/orders/${widget.orderId}');
-      setState(() => _order = Map<String, dynamic>.from(res['order'] as Map));
+      final o = Map<String, dynamic>.from(res['order'] as Map);
+      if (!mounted) return;
+      setState(() {
+        _order = o;
+        _riderLat ??= (o['rider']?['currentLat'] as num?)?.toDouble();
+        _riderLng ??= (o['rider']?['currentLng'] as num?)?.toDouble();
+      });
     } catch (_) {
       // Fallback order ensures tracking screen works instantly
       setState(() {

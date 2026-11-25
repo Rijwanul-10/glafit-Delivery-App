@@ -785,11 +785,20 @@ class _RideMatchingRadarScreenState extends ConsumerState<RideMatchingRadarScree
   Map<String, dynamic>? _trip;
   int _secondsLeft = 45;
   Timer? _timer;
+  late final SocketService _sock;
+
+  void _onRideStatus(dynamic _) {
+    if (mounted) _load();
+  }
 
   @override
   void initState() {
     super.initState();
+    _sock = ref.read(socketServiceProvider);
     _load();
+    _sock.joinTracking('ride', widget.tripId);
+    _sock.socket?.off('ride:status', _onRideStatus);
+    _sock.socket?.on('ride:status', _onRideStatus);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() => _secondsLeft = _secondsLeft > 0 ? _secondsLeft - 1 : 0);
@@ -798,6 +807,8 @@ class _RideMatchingRadarScreenState extends ConsumerState<RideMatchingRadarScree
 
   @override
   void dispose() {
+    _sock.socket?.off('ride:status', _onRideStatus);
+    _sock.leaveTracking('ride', widget.tripId);
     _timer?.cancel();
     super.dispose();
   }
@@ -968,11 +979,35 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
   bool _loading = true;
   int _elapsedSeconds = 0;
   Timer? _waitTimer;
+  late final SocketService _sock;
+
+  void _onRideStatus(dynamic _) {
+    if (mounted) _load();
+  }
+
+  void _onTrackingLocation(dynamic data) {
+    if (!mounted || data is! Map) return;
+    if (data['orderId'] != null && data['orderId'] != widget.tripId) return;
+    final lat = (data['lat'] as num?)?.toDouble();
+    final lng = (data['lng'] as num?)?.toDouble();
+    if (lat != null && lng != null) {
+      setState(() {
+        _riderLat = lat;
+        _riderLng = lng;
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _sock = ref.read(socketServiceProvider);
     _load();
+    _sock.joinTracking('ride', widget.tripId);
+    _sock.socket?.off('ride:status', _onRideStatus);
+    _sock.socket?.off('tracking:location', _onTrackingLocation);
+    _sock.socket?.on('ride:status', _onRideStatus);
+    _sock.socket?.on('tracking:location', _onTrackingLocation);
     _waitTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       if (_trip?['status'] == 'RIDER_ASSIGNED') {
@@ -983,6 +1018,9 @@ class _RideActiveTripScreenState extends ConsumerState<RideActiveTripScreen> {
 
   @override
   void dispose() {
+    _sock.socket?.off('ride:status', _onRideStatus);
+    _sock.socket?.off('tracking:location', _onTrackingLocation);
+    _sock.leaveTracking('ride', widget.tripId);
     _waitTimer?.cancel();
     super.dispose();
   }

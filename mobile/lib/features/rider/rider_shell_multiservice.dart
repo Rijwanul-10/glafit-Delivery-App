@@ -992,18 +992,28 @@ class _LookingForRequestsScreenState
     ],
   };
 
+  late final SocketService _sock;
+
+  void _onOffer(_) {
+    if (mounted) _load();
+  }
+
   @override
   void initState() {
     super.initState();
+    _sock = ref.read(socketServiceProvider);
     _load();
-    ref
-        .read(socketServiceProvider)
-        .socket
-        ?.on('rider:incoming_offer', (_) => _load());
-    ref
-        .read(socketServiceProvider)
-        .socket
-        ?.on('rider:ride_addon_offer', (_) => _load());
+    _sock.socket?.off('rider:incoming_offer', _onOffer);
+    _sock.socket?.off('rider:ride_addon_offer', _onOffer);
+    _sock.socket?.on('rider:incoming_offer', _onOffer);
+    _sock.socket?.on('rider:ride_addon_offer', _onOffer);
+  }
+
+  @override
+  void dispose() {
+    _sock.socket?.off('rider:incoming_offer', _onOffer);
+    _sock.socket?.off('rider:ride_addon_offer', _onOffer);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -1295,6 +1305,28 @@ class _LookingForRequestsScreenState
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (_open?['riderH3Cell'] != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: TwoBeeColors.surfaceTonal,
+                      borderRadius: TwoBeeRadii.inner,
+                      border: Border.all(color: TwoBeeColors.borderSoft),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.hexagon_outlined, size: 16, color: TwoBeeColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'H3 Q${_open?['h3Resolution'] ?? 6} Honeycomb · Cell ${_open?['riderH3Cell']} · ${_open?['geoEngine'] ?? 'geo'}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TwoBeeColors.primaryDark),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const TwoBeeMapPreview(height: 160),
                 const SizedBox(height: 12),
                 // Service Filter Tabs Bar: Food, Solo Ride, Parcel (Multi-Service is enabled via Parcel, not open radar)
@@ -2416,6 +2448,9 @@ class _ParcelDeliverScreenState extends ConsumerState<ParcelDeliverScreen> {
   bool _loading = false;
   bool _completed = false;
   String? _err;
+  Timer? _gpsTimer;
+  double _liveLat = 23.8120;
+  double _liveLng = 90.4040;
 
   static final List<Map<String, dynamic>> _defaultCorridorAddons = [
     {
@@ -2439,6 +2474,27 @@ class _ParcelDeliverScreenState extends ConsumerState<ParcelDeliverScreen> {
   void initState() {
     super.initState();
     if (widget.multiServiceEligible) _checkRadar();
+    _gpsTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || _completed) return;
+      final riderId = ref.read(authControllerProvider).roles?['rider']?['id'] as String?;
+      if (riderId == null) return;
+      setState(() {
+        _liveLat += 0.0002;
+        _liveLng -= 0.0001;
+      });
+      ref.read(socketServiceProvider).streamRiderLocation(
+            riderId: riderId,
+            lat: _liveLat,
+            lng: _liveLng,
+            activeParcelId: widget.parcelId,
+          );
+    });
+  }
+
+  @override
+  void dispose() {
+    _gpsTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkRadar() async {
@@ -4560,11 +4616,31 @@ class _RiderFoodExecutionScreenState
   int _step = 0; // 0: Heading to Rest, 1: En Route to Cust, 2: Handover PIN, 3: Completed
   bool _codCollected = true;
   String? _err;
+  Timer? _gpsTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _gpsTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || _step >= 3) return;
+      final riderId = ref.read(authControllerProvider).roles?['rider']?['id'] as String?;
+      if (riderId == null) return;
+      final pos = ref.read(foodOrderSyncProvider).riderPosition;
+      ref.read(socketServiceProvider).streamRiderLocation(
+            riderId: riderId,
+            lat: pos.latitude,
+            lng: pos.longitude,
+            activeFoodOrderId: widget.orderId,
+          );
+    });
+  }
+
+  @override
+  void dispose() {
+    _gpsTimer?.cancel();
+    _pinCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -5482,11 +5558,36 @@ class _RiderRideExecutionScreenState
   bool _helmetVerified = true;
   bool _cashCollected = true;
   String? _err;
+  Timer? _gpsTimer;
+  double _liveLat = 23.7945;
+  double _liveLng = 90.4060;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _gpsTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || _step >= 4) return;
+      final riderId = ref.read(authControllerProvider).roles?['rider']?['id'] as String?;
+      if (riderId == null) return;
+      setState(() {
+        _liveLat += 0.0002;
+        _liveLng -= 0.0001;
+      });
+      ref.read(socketServiceProvider).streamRiderLocation(
+            riderId: riderId,
+            lat: _liveLat,
+            lng: _liveLng,
+            activeRideId: widget.tripId,
+          );
+    });
+  }
+
+  @override
+  void dispose() {
+    _gpsTimer?.cancel();
+    _pinCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -5755,7 +5856,15 @@ class _RiderRideExecutionScreenState
             ),
           ),
           const SizedBox(height: 12),
-          const TwoBeeMapPreview(height: 150),
+          TwoBeeMapPreview(
+            pickupLat: (t['pickupLat'] as num?)?.toDouble() ?? 23.7937,
+            pickupLng: (t['pickupLng'] as num?)?.toDouble() ?? 90.4066,
+            dropoffLat: (t['dropoffLat'] as num?)?.toDouble() ?? 23.8648,
+            dropoffLng: (t['dropoffLng'] as num?)?.toDouble() ?? 90.3974,
+            riderLat: _liveLat,
+            riderLng: _liveLng,
+            height: 150,
+          ),
           const SizedBox(height: 12),
 
           // STEP 0: Heading to Passenger Pickup

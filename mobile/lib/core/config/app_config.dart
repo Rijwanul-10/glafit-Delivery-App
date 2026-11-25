@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppConfig {
@@ -24,23 +23,15 @@ class AppConfig {
     await prefs.setString('twobee_server_origin', clean);
   }
 
+  static const String defaultProdServerOrigin = 'https://twobee-api-1o6z.onrender.com';
+
   static String get serverOrigin {
     if (_runtimeHostOverride != null && _runtimeHostOverride!.isNotEmpty) {
       return _runtimeHostOverride!;
     }
     const defined = String.fromEnvironment('SOCKET_URL');
     if (defined.isNotEmpty) return defined;
-    if (kIsWeb) {
-      final host = Uri.base.host;
-      if (host.isNotEmpty && host != 'localhost' && host != '127.0.0.1') {
-        return '${Uri.base.scheme}://$host:4000';
-      }
-      return 'http://localhost:4000';
-    }
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:4000';
-    }
-    return 'http://localhost:4000';
+    return defaultProdServerOrigin;
   }
 
   static String get apiBaseUrl {

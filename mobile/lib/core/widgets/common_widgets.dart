@@ -511,7 +511,7 @@ Future<bool> showStripeSandboxDialog(BuildContext context, {required num amountB
   return result == true;
 }
 
-class TwoBeeMapPreview extends StatelessWidget {
+class TwoBeeMapPreview extends StatefulWidget {
   final double pickupLat;
   final double pickupLng;
   final double? dropoffLat;
@@ -532,28 +532,50 @@ class TwoBeeMapPreview extends StatelessWidget {
   });
 
   @override
+  State<TwoBeeMapPreview> createState() => _TwoBeeMapPreviewState();
+}
+
+class _TwoBeeMapPreviewState extends State<TwoBeeMapPreview> {
+  final MapController _mapController = MapController();
+
+  @override
+  void didUpdateWidget(covariant TwoBeeMapPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.riderLat != null &&
+        widget.riderLng != null &&
+        (widget.riderLat != oldWidget.riderLat || widget.riderLng != oldWidget.riderLng)) {
+      try {
+        _mapController.move(
+          LatLng(widget.riderLat!, widget.riderLng!),
+          _mapController.camera.zoom,
+        );
+      } catch (_) {}
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final center = LatLng(
-      riderLat ?? pickupLat,
-      riderLng ?? pickupLng,
+      widget.riderLat ?? widget.pickupLat,
+      widget.riderLng ?? widget.pickupLng,
     );
     final markers = <Marker>[
       Marker(
-        point: LatLng(pickupLat, pickupLng),
+        point: LatLng(widget.pickupLat, widget.pickupLng),
         width: 36,
         height: 36,
         child: const Icon(Icons.trip_origin, color: TwoBeeColors.primary, size: 28),
       ),
-      if (dropoffLat != null && dropoffLng != null)
+      if (widget.dropoffLat != null && widget.dropoffLng != null)
         Marker(
-          point: LatLng(dropoffLat!, dropoffLng!),
+          point: LatLng(widget.dropoffLat!, widget.dropoffLng!),
           width: 36,
           height: 36,
           child: const Icon(Icons.location_on_rounded, color: Colors.redAccent, size: 30),
         ),
-      if (riderLat != null && riderLng != null)
+      if (widget.riderLat != null && widget.riderLng != null)
         Marker(
-          point: LatLng(riderLat!, riderLng!),
+          point: LatLng(widget.riderLat!, widget.riderLng!),
           width: 40,
           height: 40,
           child: Container(
@@ -572,19 +594,20 @@ class TwoBeeMapPreview extends StatelessWidget {
       child: ClipRRect(
         borderRadius: TwoBeeRadii.card,
         child: SizedBox(
-          height: height,
+          height: widget.height,
           child: FlutterMap(
+            mapController: _mapController,
             options: MapOptions(initialCenter: center, initialZoom: 12.8),
             children: [
               TileLayer(
                 urlTemplate: AppConfig.mapTileUrl,
                 userAgentPackageName: 'app.twobee.mobile',
               ),
-              if (dropoffLat != null && dropoffLng != null)
+              if (widget.dropoffLat != null && widget.dropoffLng != null)
                 PolylineLayer(
                   polylines: [
                     Polyline(
-                      points: [LatLng(pickupLat, pickupLng), LatLng(dropoffLat!, dropoffLng!)],
+                      points: [LatLng(widget.pickupLat, widget.pickupLng), LatLng(widget.dropoffLat!, widget.dropoffLng!)],
                       strokeWidth: 4,
                       color: TwoBeeColors.primary,
                     ),

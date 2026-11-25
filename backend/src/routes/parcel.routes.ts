@@ -259,9 +259,14 @@ export function sanitizeParcelForClient(p: {
   senderName: string;
   pickupAddress: string;
   originZoneId: string;
+  pickupLat: number;
+  pickupLng: number;
   recipientName: string;
+  recipientPhone: string;
   dropoffAddress: string;
   destinationZoneId: string;
+  dropoffLat: number;
+  dropoffLng: number;
   distanceKm: number;
   status: string;
   paymentMethod: string;
@@ -306,9 +311,14 @@ export function sanitizeParcelForClient(p: {
     senderName: p.senderName,
     pickupAddress: p.pickupAddress,
     originZoneId: p.originZoneId,
+    pickupLat: p.pickupLat,
+    pickupLng: p.pickupLng,
     recipientName: p.recipientName,
+    recipientPhone: p.recipientPhone,
     dropoffAddress: p.dropoffAddress,
     destinationZoneId: p.destinationZoneId,
+    dropoffLat: p.dropoffLat,
+    dropoffLng: p.dropoffLng,
     distanceKm: p.distanceKm,
     status: p.status,
     statusBanner: stepLabel, // Always strictly neutral parcel copy!
