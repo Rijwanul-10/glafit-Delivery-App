@@ -8,6 +8,7 @@ import { hashOtp } from '../services/smsProvider.js';
 import { env } from '../config/env.js';
 import { getIO } from '../realtime/socketServer.js';
 import { generateReceiptPdf } from '../services/pdfService.js';
+import { geoMatchService } from '../services/geoMatchService.js';
 
 export const merchantRouter = Router();
 merchantRouter.use(requireAuth);
@@ -516,8 +517,24 @@ panel.post(
       where: { id: order.id },
       data: { status: 'READY_FOR_PICKUP' },
     });
+    await geoMatchService.indexOpenRequest('food', order.id, mp.lat, mp.lng);
+    const nearbyFoodRiders = await geoMatchService.findNearbyRiders('food', mp.lat, mp.lng, 8);
+    for (const hit of nearbyFoodRiders) {
+      getIO()?.to(`rider:${hit.riderId}`).emit('rider:incoming_offer', {
+        serviceType: 'FOOD',
+        id: order.id,
+        code: order.orderCode,
+        pickupAddress: mp.address,
+        dropoffAddress: order.deliveryAddress,
+        payoutBdt: order.deliveryFeeBdt,
+        distanceKm: hit.distanceKm,
+        h3Cell: hit.h3Cell,
+        ringDistance: hit.ringDistance,
+        countdownSeconds: 15,
+      });
+    }
     getIO()?.to(`tracking:food:${order.id}`).emit('order:status', { orderId: order.id, status: 'READY_FOR_PICKUP' });
-    res.json({ ok: true, order: updated });
+    res.json({ ok: true, order: updated, nearbyRidersNotified: nearbyFoodRiders.length });
   }),
 );
 

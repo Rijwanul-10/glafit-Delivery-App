@@ -50,18 +50,28 @@ export async function initPrisma(options?: { pglitePath?: string }): Promise<Pri
           ? undefined
           : { rejectUnauthorized: false },
     });
-    const existing = await pgPool.query<{ tbl: string | null }>(`SELECT to_regclass('public."User"') AS tbl`);
-    if (!existing.rows[0]?.tbl) {
-      const sql = fs.readFileSync(resolveInitSqlPath(), 'utf8');
-      await pgPool.query(sql);
-      console.info('[2Bee Postgres] Bootstrapped initial schema from prisma/init.sql');
-    } else {
-      const pushTbl = await pgPool.query<{ tbl: string | null }>(
-        `SELECT to_regclass('public."DevicePushToken"') AS tbl`,
-      );
-      if (!pushTbl.rows[0]?.tbl) {
-        await pgPool.query(DEVICE_PUSH_TOKEN_DDL);
+    try {
+      const existing = await pgPool.query<{ tbl: string | null }>(`SELECT to_regclass('public."User"') AS tbl`);
+      if (!existing.rows[0]?.tbl) {
+        const sql = fs.readFileSync(resolveInitSqlPath(), 'utf8');
+        await pgPool.query(sql);
+        console.info('[2Bee Postgres] Bootstrapped initial schema from prisma/init.sql');
+      } else {
+        const pushTbl = await pgPool.query<{ tbl: string | null }>(
+          `SELECT to_regclass('public."DevicePushToken"') AS tbl`,
+        );
+        if (!pushTbl.rows[0]?.tbl) {
+          await pgPool.query(DEVICE_PUSH_TOKEN_DDL);
+        }
       }
+    } catch (err) {
+      const e = err as { code?: string; message?: string };
+      if ((e.code === 'ENOTFOUND' || e.code === 'ENETUNREACH') && env.databaseUrl.includes('.supabase.co')) {
+        console.error(
+          '[2Bee Postgres] Cannot reach Supabase direct host (IPv6-only). On Render / IPv4 networks, use Supabase Session Pooler URI (aws-0-<region>.pooler.supabase.com:5432) from Supabase Connect -> Session Pooler.',
+        );
+      }
+      throw err;
     }
     const adapter = new PrismaPg(pgPool);
     prismaInstance = new PrismaClient({ adapter });

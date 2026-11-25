@@ -168,7 +168,8 @@ rideRouter.post(
       });
     }
 
-    // 2) Standard Redis GEO nearby online riders
+    // 2) Standard Redis GEO + H3 Q6 Honeycomb nearby online riders
+    await geoMatchService.indexOpenRequest('ride', trip.id, parsed.pickupLat, parsed.pickupLng);
     const nearbyRiders = await geoMatchService.findNearbyRiders('ride', parsed.pickupLat, parsed.pickupLng, 8);
     for (const hit of nearbyRiders) {
       getIO()?.to(`rider:${hit.riderId}`).emit('rider:incoming_offer', {

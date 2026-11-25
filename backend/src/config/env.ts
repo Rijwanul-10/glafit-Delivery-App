@@ -13,10 +13,10 @@ export const env = {
   pgliteDataDir: process.env.PGLITE_DATA_DIR ?? './.pglite',
   databaseUrl: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/twobee_dev?schema=public',
 
-  // Redis GEO & Zone A->B matching (Upstash free Redis or in-memory fallback)
+  // Redis GEO & H3 Q6 Honeycomb matching (Upstash free Redis or in-memory fallback)
   redisUrl: process.env.REDIS_URL ?? '',
   geoBackend: (process.env.GEO_BACKEND ?? 'auto').toLowerCase() as 'auto' | 'redis' | 'memory',
-  h3Resolution: Number(process.env.H3_RESOLUTION ?? 8),
+  h3Resolution: Number(process.env.H3_RESOLUTION ?? 6),
 
   // JWT & Compliance rules
   jwtAccessSecret: process.env.JWT_ACCESS_SECRET ?? 'twobee_dev_access_secret_min_32_characters_long_key',

@@ -6,7 +6,7 @@ import { asyncHandler, HttpError } from '../middleware/errorHandler.js';
 import { requireAuth, requireRoleSession, signRoleSessionToken } from '../middleware/auth.js';
 import { hashOtp } from '../services/smsProvider.js';
 import { env } from '../config/env.js';
-import { geoMatchService, type DispatchServiceKey } from '../services/geoMatchService.js';
+import { geoMatchService, h3IndexStrategy, type DispatchServiceKey } from '../services/geoMatchService.js';
 import { getIO } from '../realtime/socketServer.js';
 import { generateReceiptPdf } from '../services/pdfService.js';
 
@@ -435,19 +435,24 @@ panel.get(
       rp.spareHelmetConfirmed &&
       rp.multiServiceEnabled;
 
-    const [openFood, openParcels, openRides, matchingAddons] = await Promise.all([
+    const riderLat = rp.currentLat ?? 23.7937;
+    const riderLng = rp.currentLng ?? 90.4066;
+    const riderH3Cell = h3IndexStrategy.cellFor(riderLat, riderLng, env.h3Resolution);
+    const honeycombNeighbors = h3IndexStrategy.neighborCells(riderLat, riderLng, 1, env.h3Resolution);
+
+    const [rawFood, rawParcels, rawRides, rawAddons] = await Promise.all([
       prisma.foodOrder.findMany({
         where: { riderId: null, status: { in: ['PREPARING', 'READY_FOR_PICKUP'] } },
-        include: { merchant: { select: { businessName: true, address: true } } },
-        take: 10,
+        include: { merchant: { select: { businessName: true, address: true, lat: true, lng: true } } },
+        take: 25,
       }),
       prisma.parcelShipment.findMany({
         where: { riderId: null, status: 'MATCHING' },
-        take: 10,
+        take: 25,
       }),
       prisma.rideTrip.findMany({
         where: { riderId: null, status: 'MATCHING' },
-        take: 10,
+        take: 25,
       }),
       msEligible
         ? prisma.rideTrip.findMany({
@@ -459,19 +464,54 @@ panel.get(
               dropoffZoneId: activeParcel!.destinationZoneId, // Strictly Zone B
             },
             include: { user: { select: { fullName: true } } },
-            take: 5,
+            take: 10,
           })
         : Promise.resolve([]),
     ]);
 
+    const [openFood, openParcels, openRides, matchingAddons] = await Promise.all([
+      geoMatchService.findNearbyRequestsForRider(
+        'food',
+        riderLat,
+        riderLng,
+        rawFood,
+        (o) => ({ lat: o.merchant?.lat, lng: o.merchant?.lng }),
+      ),
+      geoMatchService.findNearbyRequestsForRider(
+        'parcel',
+        riderLat,
+        riderLng,
+        rawParcels,
+        (p) => ({ lat: p.pickupLat, lng: p.pickupLng }),
+      ),
+      geoMatchService.findNearbyRequestsForRider(
+        'ride',
+        riderLat,
+        riderLng,
+        rawRides,
+        (r) => ({ lat: r.pickupLat, lng: r.pickupLng }),
+      ),
+      geoMatchService.findNearbyRequestsForRider(
+        'ride',
+        riderLat,
+        riderLng,
+        rawAddons,
+        (r) => ({ lat: r.pickupLat, lng: r.pickupLng }),
+      ),
+    ]);
+
     res.json({
       ok: true,
+      geoEngine: geoMatchService.getEngineName(),
+      h3Resolution: env.h3Resolution,
+      riderH3Cell,
+      honeycombNeighbors,
       canAcceptMultiServiceRideAddon: msEligible,
       rideFirstLocked: activeRide !== null,
-      food: openFood,
-      parcel: openParcels,
-      ride: openRides,
-      multiServiceRideAddons: matchingAddons,
+      food: openFood.slice(0, 10),
+      parcel: openParcels.slice(0, 10),
+      ride: openRides.slice(0, 10),
+      multiServiceRideAddons: matchingAddons.slice(0, 5),
     });
   }),
 );

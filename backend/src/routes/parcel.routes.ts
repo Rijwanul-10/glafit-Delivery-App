@@ -198,6 +198,7 @@ parcelRouter.post(
       data: { serviceType: 'PARCEL', orderId: shipment.id, clientId: req.auth!.userId },
     });
 
+    await geoMatchService.indexOpenRequest('parcel', shipment.id, parsed.pickupLat, parsed.pickupLng);
     const nearbyRiders = await geoMatchService.findNearbyRiders('parcel', parsed.pickupLat, parsed.pickupLng, 10);
     for (const hit of nearbyRiders) {
       getIO()?.to(`rider:${hit.riderId}`).emit('rider:incoming_offer', {

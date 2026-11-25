@@ -1,5 +1,5 @@
 import { Redis } from 'ioredis';
-import { latLngToCell, gridDisk } from 'h3-js';
+import { latLngToCell, gridDisk, gridDistance } from 'h3-js';
 import { env } from '../config/env.js';
 import { haversineKm } from './mapsService.js';
 
@@ -21,16 +21,26 @@ export interface NearbyRiderHit {
   lng: number;
   distanceKm: number;
   h3Cell: string;
+  ringDistance: number;
+}
+
+export interface HoneycombGeoMeta {
+  h3Cell: string;
+  h3Resolution: number;
+  ringDistance: number;
+  distanceKm: number;
+  engine: 'redis-geo' | 'memory-geo-fallback';
 }
 
 /**
- * Planned hyper-scale spatial index adapter (Uber H3 hexagonal grid).
- * Already wired so hyper-scale H3 bucketing can replace/augment Redis GEO keys
- * without changing dispatch callers.
+ * H3 Q6 Honeycomb spatial index adapter (Uber H3 hexagonal grid, default resolution 6).
+ * Uses hexagonal cells and k-ring honeycomb expansion (gridDisk / gridDistance)
+ * paired with Redis GEO (or in-memory fallback).
  */
 export interface H3IndexStrategy {
   cellFor(lat: number, lng: number, resolution?: number): string;
   neighborCells(lat: number, lng: number, kRings?: number, resolution?: number): string[];
+  hexRingDistance(originCell: string, targetCell: string): number;
 }
 
 export const h3IndexStrategy: H3IndexStrategy = {
@@ -41,18 +51,33 @@ export const h3IndexStrategy: H3IndexStrategy = {
     const origin = latLngToCell(lat, lng, resolution);
     return gridDisk(origin, kRings);
   },
+  hexRingDistance(originCell: string, targetCell: string): number {
+    if (originCell === targetCell) return 0;
+    try {
+      return gridDistance(originCell, targetCell);
+    } catch {
+      return 99;
+    }
+  },
 };
 
 /**
- * Hybrid Redis GEO + Memory fallback geospatial & Zone A -> Zone B multi-service matcher.
- * Production uses Redis GEOADD / GEORADIUSBYMEMBER / GEORADIUS + EX 30 TTL heartbeats.
+ * Hybrid Redis GEO + H3 Q6 Honeycomb spatial matcher & Zone A -> Zone B multi-service matcher.
+ * Production uses Redis GEOADD / GEORADIUS + H3 Q6 honeycomb buckets + EX 30 TTL heartbeats.
  */
 class GeoMatchService {
   private redis: Redis | null = null;
   private redisReady = false;
 
-  // In-memory store mirroring Redis GEO + 30s heartbeat TTL + Zone A->B Sets
-  private memCoords = new Map<string, { lat: number; lng: number; services: Set<DispatchServiceKey>; expiresAt: number }>();
+  // In-memory store mirroring Redis GEO + H3 Q6 buckets + 30s heartbeat TTL + Zone A->B Sets
+  private memCoords = new Map<
+    string,
+    { lat: number; lng: number; h3Cell: string; services: Set<DispatchServiceKey>; expiresAt: number }
+  >();
+  private memRequests = new Map<
+    string,
+    { service: DispatchServiceKey; lat: number; lng: number; h3Cell: string; expiresAt: number }
+  >();
   private memMultiServiceParcels = new Map<string, ActiveMultiServiceSlot>(); // riderId -> slot
 
   async init(): Promise<void> {
@@ -69,7 +94,7 @@ class GeoMatchService {
       await client.ping();
       this.redis = client;
       this.redisReady = true;
-      console.info('[2Bee GeoMatchService] Connected to Redis GEO backend');
+      console.info(`[2Bee GeoMatchService] Connected to Redis GEO + H3 Q${env.h3Resolution} Honeycomb backend`);
     } catch (err) {
       console.warn('[2Bee GeoMatchService] Redis unreachable; using in-memory GEO fallback:', (err as Error).message);
       this.redisReady = false;
@@ -86,19 +111,23 @@ class GeoMatchService {
     lng: number,
     services: DispatchServiceKey[],
   ): Promise<{ h3Cell: string; engine: string }> {
-    const h3Cell = h3IndexStrategy.cellFor(lat, lng);
+    const res = env.h3Resolution;
+    const h3Cell = h3IndexStrategy.cellFor(lat, lng, res);
     if (this.redisReady && this.redis) {
       const pipe = this.redis.pipeline();
       const allServices: DispatchServiceKey[] = ['food', 'parcel', 'ride'];
       for (const svc of allServices) {
-        const key = `geo:riders:${svc}`;
+        const geoKey = `geo:riders:${svc}`;
+        const h3BucketKey = `h3:q${res}:riders:${h3Cell}:${svc}`;
         if (services.includes(svc)) {
-          pipe.geoadd(key, lng, lat, riderId);
+          pipe.geoadd(geoKey, lng, lat, riderId);
+          pipe.sadd(h3BucketKey, riderId);
+          pipe.expire(h3BucketKey, 60);
         } else {
-          pipe.zrem(key, riderId);
+          pipe.zrem(geoKey, riderId);
+          pipe.srem(h3BucketKey, riderId);
         }
       }
-      // Future H3 index key planned for hyper-scale bucketing
       pipe.set(`rider:h3:${riderId}`, h3Cell, 'EX', 30);
       pipe.set(`rider:heartbeat:${riderId}`, `${lat},${lng}`, 'EX', 30);
       await pipe.exec();
@@ -106,6 +135,7 @@ class GeoMatchService {
       this.memCoords.set(riderId, {
         lat,
         lng,
+        h3Cell,
         services: new Set(services),
         expiresAt: Date.now() + 30_000,
       });
@@ -115,15 +145,67 @@ class GeoMatchService {
 
   async setRiderOffline(riderId: string): Promise<void> {
     if (this.redisReady && this.redis) {
-      await Promise.all([
+      const prevCell = await this.redis.get(`rider:h3:${riderId}`);
+      const res = env.h3Resolution;
+      const ops: Promise<unknown>[] = [
         this.redis.zrem('geo:riders:food', riderId),
         this.redis.zrem('geo:riders:parcel', riderId),
         this.redis.zrem('geo:riders:ride', riderId),
         this.redis.del(`rider:heartbeat:${riderId}`, `rider:h3:${riderId}`),
-      ]);
+      ];
+      if (prevCell) {
+        ops.push(
+          this.redis.srem(`h3:q${res}:riders:${prevCell}:food`, riderId),
+          this.redis.srem(`h3:q${res}:riders:${prevCell}:parcel`, riderId),
+          this.redis.srem(`h3:q${res}:riders:${prevCell}:ride`, riderId),
+        );
+      }
+      await Promise.all(ops);
     }
     this.memCoords.delete(riderId);
     await this.clearActiveMultiServiceParcel(riderId);
+  }
+
+  async indexOpenRequest(
+    service: DispatchServiceKey,
+    requestId: string,
+    lat: number,
+    lng: number,
+  ): Promise<string> {
+    const res = env.h3Resolution;
+    const h3Cell = h3IndexStrategy.cellFor(lat, lng, res);
+    if (this.redisReady && this.redis) {
+      const h3BucketKey = `h3:q${res}:requests:${h3Cell}:${service}`;
+      await this.redis
+        .pipeline()
+        .geoadd(`geo:requests:${service}`, lng, lat, requestId)
+        .sadd(h3BucketKey, requestId)
+        .expire(h3BucketKey, 3600)
+        .set(`req:h3:${service}:${requestId}`, h3Cell, 'EX', 3600)
+        .exec();
+    } else {
+      this.memRequests.set(`${service}:${requestId}`, {
+        service,
+        lat,
+        lng,
+        h3Cell,
+        expiresAt: Date.now() + 3_600_000,
+      });
+    }
+    return h3Cell;
+  }
+
+  async removeOpenRequest(service: DispatchServiceKey, requestId: string): Promise<void> {
+    if (this.redisReady && this.redis) {
+      const res = env.h3Resolution;
+      const cell = await this.redis.get(`req:h3:${service}:${requestId}`);
+      const pipe = this.redis.pipeline().zrem(`geo:requests:${service}`, requestId).del(`req:h3:${service}:${requestId}`);
+      if (cell) {
+        pipe.srem(`h3:q${res}:requests:${cell}:${service}`, requestId);
+      }
+      await pipe.exec();
+    }
+    this.memRequests.delete(`${service}:${requestId}`);
   }
 
   async findNearbyRiders(
@@ -131,7 +213,12 @@ class GeoMatchService {
     lat: number,
     lng: number,
     radiusKm = 8,
+    maxRing = 2,
   ): Promise<NearbyRiderHit[]> {
+    const res = env.h3Resolution;
+    const originCell = h3IndexStrategy.cellFor(lat, lng, res);
+    const honeycombRingSet = new Set(h3IndexStrategy.neighborCells(lat, lng, maxRing, res));
+
     if (this.redisReady && this.redis) {
       const raw = (await this.redis.georadius(
         `geo:riders:${service}`,
@@ -150,14 +237,19 @@ class GeoMatchService {
         if (!alive) continue;
         const nLat = Number(rLat);
         const nLng = Number(rLng);
+        const riderCell = h3IndexStrategy.cellFor(nLat, nLng, res);
+        const distKm = Number(distStr);
+        if (!honeycombRingSet.has(riderCell) && distKm > radiusKm) continue;
         hits.push({
           riderId,
           lat: nLat,
           lng: nLng,
-          distanceKm: Number(distStr),
-          h3Cell: h3IndexStrategy.cellFor(nLat, nLng),
+          distanceKm: distKm,
+          h3Cell: riderCell,
+          ringDistance: h3IndexStrategy.hexRingDistance(originCell, riderCell),
         });
       }
+      hits.sort((a, b) => a.ringDistance - b.ringDistance || a.distanceKm - b.distanceKm);
       return hits;
     }
 
@@ -170,18 +262,106 @@ class GeoMatchService {
       }
       if (!pos.services.has(service)) continue;
       const dist = haversineKm(lat, lng, pos.lat, pos.lng);
-      if (dist <= radiusKm) {
+      const riderCell = pos.h3Cell || h3IndexStrategy.cellFor(pos.lat, pos.lng, res);
+      if (dist <= radiusKm || honeycombRingSet.has(riderCell)) {
         hits.push({
           riderId,
           lat: pos.lat,
           lng: pos.lng,
           distanceKm: dist,
-          h3Cell: h3IndexStrategy.cellFor(pos.lat, pos.lng),
+          h3Cell: riderCell,
+          ringDistance: h3IndexStrategy.hexRingDistance(originCell, riderCell),
         });
       }
     }
-    hits.sort((a, b) => a.distanceKm - b.distanceKm);
+    hits.sort((a, b) => a.ringDistance - b.ringDistance || a.distanceKm - b.distanceKm);
     return hits;
+  }
+
+  /**
+   * Rider-side Q6 Honeycomb + Redis GEO request finder.
+   * Expands H3 Q6 honeycomb rings around the rider (ring 0 -> ring 1 -> ring 2)
+   * to discover and rank nearby Ride, Parcel, and Food delivery requests.
+   */
+  async findNearbyRequestsForRider<T extends { id: string }>(
+    service: DispatchServiceKey,
+    riderLat: number,
+    riderLng: number,
+    requests: T[],
+    getCoords: (item: T) => { lat: number | null | undefined; lng: number | null | undefined },
+    maxRing = 2,
+    radiusKm = 15,
+  ): Promise<Array<T & { geoMeta: HoneycombGeoMeta }>> {
+    const res = env.h3Resolution;
+    const engine = this.getEngineName();
+    const riderCell = h3IndexStrategy.cellFor(riderLat, riderLng, res);
+    const honeycombRingSet = new Set(h3IndexStrategy.neighborCells(riderLat, riderLng, maxRing, res));
+
+    const redisDistMap = new Map<string, number>();
+    if (this.redisReady && this.redis && requests.length > 0) {
+      const pipe = this.redis.pipeline();
+      for (const req of requests) {
+        const coords = getCoords(req);
+        if (coords.lat != null && coords.lng != null) {
+          const cell = h3IndexStrategy.cellFor(coords.lat, coords.lng, res);
+          pipe.geoadd(`geo:requests:${service}`, coords.lng, coords.lat, req.id);
+          pipe.sadd(`h3:q${res}:requests:${cell}:${service}`, req.id);
+          pipe.expire(`h3:q${res}:requests:${cell}:${service}`, 3600);
+        }
+      }
+      await pipe.exec();
+
+      const raw = (await this.redis.georadius(
+        `geo:requests:${service}`,
+        riderLng,
+        riderLat,
+        radiusKm,
+        'km',
+        'WITHDIST',
+        'ASC',
+      )) as Array<[string, string]>;
+      for (const [id, distStr] of raw) {
+        redisDistMap.set(id, Number(distStr));
+      }
+    }
+
+    const enriched: Array<T & { geoMeta: HoneycombGeoMeta }> = [];
+    for (const item of requests) {
+      const coords = getCoords(item);
+      if (coords.lat == null || coords.lng == null) {
+        enriched.push({
+          ...item,
+          geoMeta: {
+            h3Cell: riderCell,
+            h3Resolution: res,
+            ringDistance: maxRing + 1,
+            distanceKm: 0,
+            engine,
+          },
+        });
+        continue;
+      }
+
+      const reqCell = h3IndexStrategy.cellFor(coords.lat, coords.lng, res);
+      const ringDist = h3IndexStrategy.hexRingDistance(riderCell, reqCell);
+      const distKm = redisDistMap.get(item.id) ?? Number(haversineKm(riderLat, riderLng, coords.lat, coords.lng).toFixed(2));
+
+      if (honeycombRingSet.has(reqCell) || ringDist <= maxRing || distKm <= radiusKm) {
+        enriched.push({
+          ...item,
+          geoMeta: {
+            h3Cell: reqCell,
+            h3Resolution: res,
+            ringDistance: ringDist,
+            distanceKm: distKm,
+            engine,
+          },
+        });
+      }
+    }
+
+    enriched.sort((a, b) => a.geoMeta.ringDistance - b.geoMeta.ringDistance || a.geoMeta.distanceKm - b.geoMeta.distanceKm);
+    return enriched;
   }
 
   /**
@@ -253,4 +433,3 @@ class GeoMatchService {
 }
 
 export const geoMatchService = new GeoMatchService();
-

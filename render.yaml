@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
     envVars:
@@ -16,6 +16,10 @@ services:
         value: postgres
       - key: GEO_BACKEND
         value: auto
+      - key: H3_RESOLUTION
+        value: "6"
+      - key: REDIS_URL
+        sync: false
       - key: MAPS_PROVIDER
         value: osm
       - key: OSRM_BASE_URL
@@ -27,8 +31,7 @@ services:
       - key: CORS_ORIGINS
         value: "*"
       - key: DATABASE_URL
-        value: postgresql://postgres:[10265574Rizwanul]@db.aazqxynssvupvcpylohx.supabase.co:5432/postgres
-        sync: false
+        sync: false # Set to Supabase Session Pooler URI (IPv4) in Render Dashboard Environment Variables
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
