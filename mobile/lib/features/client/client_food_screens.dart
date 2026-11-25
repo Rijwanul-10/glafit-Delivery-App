@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../core/network/api_client.dart';
 import '../../core/services/food_order_sync_service.dart';
 import '../../core/theme/twobee_theme.dart';
@@ -23,16 +25,21 @@ class CartLine {
     this.quantity = 1,
   });
 
-  double get unitPrice => basePrice + selectedOptions.fold(0.0, (s, o) => s + ((o['extraBdt'] as num?) ?? 0).toDouble());
+  double get unitPrice =>
+      basePrice +
+      selectedOptions.fold(
+        0.0,
+        (s, o) => s + ((o['extraBdt'] as num?) ?? 0).toDouble(),
+      );
   double get lineTotal => unitPrice * quantity;
 
   CartLine copyWith({int? quantity}) => CartLine(
-        menuItemId: menuItemId,
-        name: name,
-        basePrice: basePrice,
-        selectedOptions: selectedOptions,
-        quantity: quantity ?? this.quantity,
-      );
+    menuItemId: menuItemId,
+    name: name,
+    basePrice: basePrice,
+    selectedOptions: selectedOptions,
+    quantity: quantity ?? this.quantity,
+  );
 }
 
 class CartState {
@@ -66,13 +73,24 @@ class CartNotifier extends StateNotifier<CartState> {
     String? removedMerchant;
     if (state.merchantId != null && state.merchantId != merchantId) {
       removedMerchant = state.merchantName ?? 'Previous Restaurant';
-      state = CartState(merchantId: merchantId, merchantName: merchantName, deliveryFee: deliveryFee, lines: [line]);
+      state = CartState(
+        merchantId: merchantId,
+        merchantName: merchantName,
+        deliveryFee: deliveryFee,
+        lines: [line],
+      );
       return removedMerchant;
     }
     final next = [...state.lines];
-    final idx = next.indexWhere((x) => x.menuItemId == line.menuItemId && x.selectedOptions.length == line.selectedOptions.length);
+    final idx = next.indexWhere(
+      (x) =>
+          x.menuItemId == line.menuItemId &&
+          x.selectedOptions.length == line.selectedOptions.length,
+    );
     if (idx >= 0) {
-      next[idx] = next[idx].copyWith(quantity: next[idx].quantity + line.quantity);
+      next[idx] = next[idx].copyWith(
+        quantity: next[idx].quantity + line.quantity,
+      );
     } else {
       next.add(line);
     }
@@ -116,7 +134,9 @@ class CartNotifier extends StateNotifier<CartState> {
   void clear() => state = const CartState();
 }
 
-final cartProvider = StateNotifierProvider<CartNotifier, CartState>((ref) => CartNotifier());
+final cartProvider = StateNotifierProvider<CartNotifier, CartState>(
+  (ref) => CartNotifier(),
+);
 
 /// Persistent Cart icon button displayed steadily with dynamic badge
 class TwoBeeCartAction extends ConsumerWidget {
@@ -130,7 +150,14 @@ class TwoBeeCartAction extends ConsumerWidget {
       tooltip: count > 0 ? 'Cart ($count items)' : 'Cart',
       icon: Badge(
         isLabelVisible: count > 0,
-        label: Text('$count', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white)),
+        label: Text(
+          '$count',
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: TwoBeeColors.primary,
         child: const Icon(Icons.shopping_bag_outlined, color: Colors.white),
       ),
@@ -162,7 +189,11 @@ final List<Map<String, dynamic>> _fallbackRestaurants = [
     'remainingDailySlots': null,
     'dailyCutoffTime': null,
     'promos': [
-      {'title': '2Bee Special Discount', 'promoCode': '2BEE100', 'discountValue': 100}
+      {
+        'title': '2Bee Special Discount',
+        'promoCode': '2BEE100',
+        'discountValue': 100,
+      },
     ],
     'categories': [
       {
@@ -182,8 +213,16 @@ final List<Map<String, dynamic>> _fallbackRestaurants = [
                 'title': 'Portion Size',
                 'required': true,
                 'options': [
-                  {'id': 'opt-reg', 'name': 'Regular (1 Person)', 'extraBdt': 0},
-                  {'id': 'opt-large', 'name': 'Large (2 Persons)', 'extraBdt': 280},
+                  {
+                    'id': 'opt-reg',
+                    'name': 'Regular (1 Person)',
+                    'extraBdt': 0,
+                  },
+                  {
+                    'id': 'opt-large',
+                    'name': 'Large (2 Persons)',
+                    'extraBdt': 280,
+                  },
                 ],
               },
               {
@@ -191,7 +230,11 @@ final List<Map<String, dynamic>> _fallbackRestaurants = [
                 'required': false,
                 'options': [
                   {'id': 'opt-egg', 'name': 'Boiled Egg', 'extraBdt': 25},
-                  {'id': 'opt-borhani', 'name': 'Glass of Shahi Borhani (250ml)', 'extraBdt': 60},
+                  {
+                    'id': 'opt-borhani',
+                    'name': 'Glass of Shahi Borhani (250ml)',
+                    'extraBdt': 60,
+                  },
                 ],
               },
             ],
@@ -276,7 +319,11 @@ final List<Map<String, dynamic>> _fallbackRestaurants = [
                 'options': [
                   {'id': 'sp-mild', 'name': 'Mild (Comforting)', 'extraBdt': 0},
                   {'id': 'sp-med', 'name': 'Medium Spice', 'extraBdt': 0},
-                  {'id': 'sp-hot', 'name': 'Spicy Bengali Style', 'extraBdt': 0},
+                  {
+                    'id': 'sp-hot',
+                    'name': 'Spicy Bengali Style',
+                    'extraBdt': 0,
+                  },
                 ],
               },
             ],
@@ -357,12 +404,42 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
   bool _loading = true;
 
   final List<Map<String, dynamic>> _cuisineCategories = [
-    {'id': 'ALL', 'name': 'All', 'icon': Icons.restaurant_rounded, 'color': Color(0xFFE8F5E9)},
-    {'id': 'Biryani', 'name': 'Biryani', 'icon': Icons.rice_bowl_rounded, 'color': Color(0xFFFFF3E0)},
-    {'id': 'Home', 'name': 'Home Cooked', 'icon': Icons.home_work_rounded, 'color': Color(0xFFE1F5FE)},
-    {'id': 'Burger', 'name': 'Burgers', 'icon': Icons.lunch_dining_rounded, 'color': Color(0xFFFBE9E7)},
-    {'id': 'Bengali', 'name': 'Bengali', 'icon': Icons.set_meal_rounded, 'color': Color(0xFFE8EAF6)},
-    {'id': 'Fast Food', 'name': 'Fast Food', 'icon': Icons.fastfood_rounded, 'color': Color(0xFFFFF8E1)},
+    {
+      'id': 'ALL',
+      'name': 'All',
+      'icon': Icons.restaurant_rounded,
+      'color': Color(0xFFE8F5E9),
+    },
+    {
+      'id': 'Biryani',
+      'name': 'Biryani',
+      'icon': Icons.rice_bowl_rounded,
+      'color': Color(0xFFFFF3E0),
+    },
+    {
+      'id': 'Home',
+      'name': 'Home Cooked',
+      'icon': Icons.home_work_rounded,
+      'color': Color(0xFFE1F5FE),
+    },
+    {
+      'id': 'Burger',
+      'name': 'Burgers',
+      'icon': Icons.lunch_dining_rounded,
+      'color': Color(0xFFFBE9E7),
+    },
+    {
+      'id': 'Bengali',
+      'name': 'Bengali',
+      'icon': Icons.set_meal_rounded,
+      'color': Color(0xFFE8EAF6),
+    },
+    {
+      'id': 'Fast Food',
+      'name': 'Fast Food',
+      'icon': Icons.fastfood_rounded,
+      'color': Color(0xFFFFF8E1),
+    },
   ];
 
   @override
@@ -374,12 +451,16 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ref.read(apiClientProvider).get(
+      final res = await ref
+          .read(apiClientProvider)
+          .get(
             '/food/restaurants',
             query: _filterType == 'ALL' ? null : {'type': _filterType},
           );
       final list = (res['restaurants'] as List?) ?? [];
-      setState(() => _restaurants = list.isNotEmpty ? list : _fallbackRestaurants);
+      setState(
+        () => _restaurants = list.isNotEmpty ? list : _fallbackRestaurants,
+      );
     } catch (_) {
       // Offline fallback ensures zero empty/crashed screens
       setState(() => _restaurants = _fallbackRestaurants);
@@ -390,9 +471,14 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
 
   List<dynamic> get _filteredRestaurants {
     return _restaurants.where((r) {
-      if (_filterType != 'ALL' && r['merchantType'] != _filterType) return false;
+      if (_filterType != 'ALL' && r['merchantType'] != _filterType)
+        return false;
       if (_selectedCategory != 'ALL') {
-        final cuisines = (r['cuisines'] as List?)?.map((c) => c.toString().toLowerCase()).toList() ?? [];
+        final cuisines =
+            (r['cuisines'] as List?)
+                ?.map((c) => c.toString().toLowerCase())
+                .toList() ??
+            [];
         final name = (r['businessName'] ?? '').toString().toLowerCase();
         final cat = _selectedCategory.toLowerCase();
         if (!cuisines.any((c) => c.contains(cat)) && !name.contains(cat)) {
@@ -430,7 +516,10 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                            icon: const Icon(
+                              Icons.arrow_back_rounded,
+                              color: Colors.white,
+                            ),
                             onPressed: () => Navigator.pop(context),
                           ),
                           Container(
@@ -442,7 +531,11 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
                               boxShadow: TwoBeeShadows.emeraldGlow,
                             ),
                             child: const Center(
-                              child: Icon(Icons.fastfood_rounded, color: TwoBeeColors.obsidian, size: 18),
+                              child: Icon(
+                                Icons.fastfood_rounded,
+                                color: TwoBeeColors.obsidian,
+                                size: 18,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -470,8 +563,16 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.favorite_border_rounded, color: Colors.white),
-                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesScreen())),
+                            icon: const Icon(
+                              Icons.favorite_border_rounded,
+                              color: Colors.white,
+                            ),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const FavoritesScreen(),
+                              ),
+                            ),
                           ),
                           const TwoBeeCartAction(),
                           const TwoBeeHomeAction(),
@@ -480,25 +581,47 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
                       const SizedBox(height: 12),
                       // Search Bar Card inside Obsidian Header
                       GestureDetector(
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FoodSearchScreen())),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const FoodSearchScreen(),
+                          ),
+                        ),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             color: TwoBeeColors.obsidianCard,
                             borderRadius: TwoBeeRadii.pill,
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.15),
+                            ),
                           ),
                           child: Row(
                             children: const [
-                              Icon(Icons.search_rounded, color: TwoBeeColors.primary, size: 20),
+                              Icon(
+                                Icons.search_rounded,
+                                color: TwoBeeColors.primary,
+                                size: 20,
+                              ),
                               SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   'Search Kacchi, Home Kitchens, Burgers...',
-                                  style: TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500),
+                                  style: TextStyle(
+                                    color: Colors.white60,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
-                              Icon(Icons.tune_rounded, color: Colors.white60, size: 18),
+                              Icon(
+                                Icons.tune_rounded,
+                                color: Colors.white60,
+                                size: 18,
+                              ),
                             ],
                           ),
                         ),
@@ -538,7 +661,9 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
                         final isSel = _selectedCategory == cat['id'];
                         return GestureDetector(
                           onTap: () {
-                            setState(() => _selectedCategory = cat['id'] as String);
+                            setState(
+                              () => _selectedCategory = cat['id'] as String,
+                            );
                           },
                           child: Column(
                             children: [
@@ -546,18 +671,26 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
                                 width: 54,
                                 height: 54,
                                 decoration: BoxDecoration(
-                                  color: isSel ? TwoBeeColors.primary : (cat['color'] as Color),
+                                  color: isSel
+                                      ? TwoBeeColors.primary
+                                      : (cat['color'] as Color),
                                   shape: BoxShape.circle,
-                                  boxShadow: isSel ? TwoBeeShadows.emeraldGlow : null,
+                                  boxShadow: isSel
+                                      ? TwoBeeShadows.emeraldGlow
+                                      : null,
                                   border: Border.all(
-                                    color: isSel ? TwoBeeColors.primary : TwoBeeColors.borderSoft,
+                                    color: isSel
+                                        ? TwoBeeColors.primary
+                                        : TwoBeeColors.borderSoft,
                                     width: isSel ? 2 : 1,
                                   ),
                                 ),
                                 child: Center(
                                   child: Icon(
                                     cat['icon'] as IconData,
-                                    color: isSel ? TwoBeeColors.obsidian : TwoBeeColors.obsidian,
+                                    color: isSel
+                                        ? TwoBeeColors.obsidian
+                                        : TwoBeeColors.obsidian,
                                     size: 24,
                                   ),
                                 ),
@@ -567,8 +700,12 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
                                 cat['name'] as String,
                                 style: TextStyle(
                                   fontSize: 11,
-                                  fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                                  color: isSel ? TwoBeeColors.primary : TwoBeeColors.textPrimary,
+                                  fontWeight: isSel
+                                      ? FontWeight.w800
+                                      : FontWeight.w600,
+                                  color: isSel
+                                      ? TwoBeeColors.primary
+                                      : TwoBeeColors.textPrimary,
                                 ),
                               ),
                             ],
@@ -621,28 +758,32 @@ class _FoodHomeScreenState extends ConsumerState<FoodHomeScreen> {
                     ),
                   )
                 : list.isEmpty
-                    ? SliverToBoxAdapter(
-                        child: Container(
-                          padding: const EdgeInsets.all(32),
-                          alignment: Alignment.center,
-                          child: Column(
-                            children: const [
-                              Icon(Icons.restaurant_menu_rounded, size: 48, color: TwoBeeColors.borderSoft),
-                              SizedBox(height: 12),
-                              Text('No kitchens found in this category', style: TextStyle(fontWeight: FontWeight.w700)),
-                            ],
+                ? SliverToBoxAdapter(
+                    child: Container(
+                      padding: const EdgeInsets.all(32),
+                      alignment: Alignment.center,
+                      child: Column(
+                        children: const [
+                          Icon(
+                            Icons.restaurant_menu_rounded,
+                            size: 48,
+                            color: TwoBeeColors.borderSoft,
                           ),
-                        ),
-                      )
-                    : SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final r = list[index] as Map;
-                            return _RestaurantCard(restaurant: r);
-                          },
-                          childCount: list.length,
-                        ),
+                          SizedBox(height: 12),
+                          Text(
+                            'No kitchens found in this category',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ],
                       ),
+                    ),
+                  )
+                : SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final r = list[index] as Map;
+                      return _RestaurantCard(restaurant: r);
+                    }, childCount: list.length),
+                  ),
           ),
         ],
       ),
@@ -655,7 +796,11 @@ class _FilterPill extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _FilterPill({required this.label, required this.selected, required this.onTap});
+  const _FilterPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -697,7 +842,8 @@ class _RestaurantCard extends StatelessWidget {
     final reviews = (r['reviewCount'] as num?)?.toInt() ?? 120;
     final avgPrep = (r['avgPrepMins'] as num?)?.toInt() ?? 25;
     final deliveryFee = (r['deliveryFeeBdt'] as num?)?.toDouble() ?? 45.0;
-    final cuisines = (r['cuisines'] as List?)?.join(' · ') ?? 'Bangladeshi · Fresh';
+    final cuisines =
+        (r['cuisines'] as List?)?.join(' · ') ?? 'Bangladeshi · Fresh';
     final remainingSlots = (r['remainingDailySlots'] as num?)?.toInt();
     final promos = (r['promos'] as List?) ?? [];
 
@@ -713,7 +859,10 @@ class _RestaurantCard extends StatelessWidget {
         borderRadius: TwoBeeRadii.card,
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => RestaurantDetailScreen(merchantId: r['id'] as String)),
+          MaterialPageRoute(
+            builder: (_) =>
+                RestaurantDetailScreen(merchantId: r['id'] as String),
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -728,12 +877,16 @@ class _RestaurantCard extends StatelessWidget {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: isHk ? const Color(0xFFE8F5E9) : const Color(0xFFFFF3E0),
+                      color: isHk
+                          ? const Color(0xFFE8F5E9)
+                          : const Color(0xFFFFF3E0),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Center(
                       child: Icon(
-                        isHk ? Icons.home_work_rounded : Icons.restaurant_rounded,
+                        isHk
+                            ? Icons.home_work_rounded
+                            : Icons.restaurant_rounded,
                         color: TwoBeeColors.obsidian,
                         size: 26,
                       ),
@@ -749,13 +902,20 @@ class _RestaurantCard extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 r['businessName'].toString(),
-                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: -0.2),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                  letterSpacing: -0.2,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: TwoBeeColors.obsidian,
                                 borderRadius: BorderRadius.circular(10),
@@ -763,11 +923,19 @@ class _RestaurantCard extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
+                                  const Icon(
+                                    Icons.star_rounded,
+                                    color: Colors.amber,
+                                    size: 14,
+                                  ),
                                   const SizedBox(width: 3),
                                   Text(
                                     '$rating ($reviews)',
-                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -777,7 +945,11 @@ class _RestaurantCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           cuisines,
-                          style: const TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: TwoBeeColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -815,7 +987,8 @@ class _RestaurantCard extends StatelessWidget {
                   if (promos.isNotEmpty)
                     _BadgeChip(
                       icon: Icons.local_offer_rounded,
-                      label: '${promos.first['promoCode']} (Save ৳${promos.first['discountValue'] ?? 100})',
+                      label:
+                          '${promos.first['promoCode']} (Save ৳${promos.first['discountValue'] ?? 100})',
                       color: const Color(0xFFFFF3E0),
                       textColor: const Color(0xFFE65100),
                     ),
@@ -829,11 +1002,19 @@ class _RestaurantCard extends StatelessWidget {
                 children: [
                   Row(
                     children: const [
-                      Icon(Icons.verified_user_rounded, color: TwoBeeColors.primary, size: 15),
+                      Icon(
+                        Icons.verified_user_rounded,
+                        color: TwoBeeColors.primary,
+                        size: 15,
+                      ),
                       SizedBox(width: 4),
                       Text(
                         'Hygiene Certified',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TwoBeeColors.primary),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: TwoBeeColors.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -842,10 +1023,18 @@ class _RestaurantCard extends StatelessWidget {
                     children: const [
                       Text(
                         'Explore Menu',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: TwoBeeColors.obsidian),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                          color: TwoBeeColors.obsidian,
+                        ),
                       ),
                       SizedBox(width: 2),
-                      Icon(Icons.chevron_right_rounded, color: TwoBeeColors.obsidian, size: 18),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: TwoBeeColors.obsidian,
+                        size: 18,
+                      ),
                     ],
                   ),
                 ],
@@ -886,7 +1075,11 @@ class _BadgeChip extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textColor),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
           ),
         ],
       ),
@@ -916,9 +1109,12 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
 
   Future<void> _search(String q) async {
     try {
-      final res = await ref.read(apiClientProvider).get('/food/restaurants', query: q.isEmpty ? null : {'q': q});
+      final res = await ref
+          .read(apiClientProvider)
+          .get('/food/restaurants', query: q.isEmpty ? null : {'q': q});
       final list = (res['restaurants'] as List?) ?? [];
-      if (mounted) setState(() => _hits = list.isNotEmpty ? list : _fallbackRestaurants);
+      if (mounted)
+        setState(() => _hits = list.isNotEmpty ? list : _fallbackRestaurants);
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -926,7 +1122,9 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
             final name = r['businessName'].toString().toLowerCase();
             final cuisines = (r['cuisines'] as List).join(' ').toLowerCase();
             final query = q.toLowerCase();
-            return query.isEmpty || name.contains(query) || cuisines.contains(query);
+            return query.isEmpty ||
+                name.contains(query) ||
+                cuisines.contains(query);
           }).toList();
         });
       }
@@ -950,7 +1148,10 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
         title: TextField(
           controller: _ctrl,
           autofocus: true,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
           decoration: const InputDecoration(
             hintText: 'Search Kacchi, Home Kitchen, Burgers...',
             hintStyle: TextStyle(color: Colors.white60),
@@ -958,10 +1159,7 @@ class _FoodSearchScreenState extends ConsumerState<FoodSearchScreen> {
           ),
           onChanged: _search,
         ),
-        actions: const [
-          TwoBeeCartAction(),
-          TwoBeeHomeAction(),
-        ],
+        actions: const [TwoBeeCartAction(), TwoBeeHomeAction()],
       ),
       body: Column(
         children: [
@@ -1051,10 +1249,7 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
       backgroundColor: TwoBeeColors.scaffoldBg,
       appBar: AppBar(
         title: const Text('Favorites'),
-        actions: const [
-          TwoBeeCartAction(),
-          TwoBeeHomeAction(),
-        ],
+        actions: const [TwoBeeCartAction(), TwoBeeHomeAction()],
       ),
       body: Column(
         children: [
@@ -1062,40 +1257,56 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
             padding: const EdgeInsets.all(16),
             child: SegmentedButton<bool>(
               segments: [
-                ButtonSegment(value: true, label: Text('Restaurants (${_restaurants.length})')),
-                ButtonSegment(value: false, label: Text('Saved Dishes (${_dishes.length})')),
+                ButtonSegment(
+                  value: true,
+                  label: Text('Restaurants (${_restaurants.length})'),
+                ),
+                ButtonSegment(
+                  value: false,
+                  label: Text('Saved Dishes (${_dishes.length})'),
+                ),
               ],
               selected: {_showRestaurants},
-              onSelectionChanged: (v) => setState(() => _showRestaurants = v.first),
+              onSelectionChanged: (v) =>
+                  setState(() => _showRestaurants = v.first),
             ),
           ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _showRestaurants
-                    ? (_restaurants.isEmpty
-                        ? const Center(child: Text('No favorite kitchens yet.'))
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _restaurants.length,
-                            itemBuilder: (_, i) => _RestaurantCard(restaurant: _restaurants[i] as Map),
-                          ))
-                    : (_dishes.isEmpty
-                        ? const Center(child: Text('No saved dishes yet.'))
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _dishes.length,
-                            itemBuilder: (_, i) {
-                              final d = _dishes[i] as Map;
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                child: ListTile(
-                                  title: Text(d['name'].toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
-                                  subtitle: Text('${d['merchant']?['businessName'] ?? ''} · ${bdt(d['priceBdt'] as num)}'),
+                ? (_restaurants.isEmpty
+                      ? const Center(child: Text('No favorite kitchens yet.'))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _restaurants.length,
+                          itemBuilder: (_, i) => _RestaurantCard(
+                            restaurant: _restaurants[i] as Map,
+                          ),
+                        ))
+                : (_dishes.isEmpty
+                      ? const Center(child: Text('No saved dishes yet.'))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _dishes.length,
+                          itemBuilder: (_, i) {
+                            final d = _dishes[i] as Map;
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: ListTile(
+                                title: Text(
+                                  d['name'].toString(),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              );
-                            },
-                          )),
+                                subtitle: Text(
+                                  '${d['merchant']?['businessName'] ?? ''} · ${bdt(d['priceBdt'] as num)}',
+                                ),
+                              ),
+                            );
+                          },
+                        )),
           ),
         ],
       ),
@@ -1109,10 +1320,12 @@ class RestaurantDetailScreen extends ConsumerStatefulWidget {
   const RestaurantDetailScreen({super.key, required this.merchantId});
 
   @override
-  ConsumerState<RestaurantDetailScreen> createState() => _RestaurantDetailScreenState();
+  ConsumerState<RestaurantDetailScreen> createState() =>
+      _RestaurantDetailScreenState();
 }
 
-class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen> {
+class _RestaurantDetailScreenState
+    extends ConsumerState<RestaurantDetailScreen> {
   Map<String, dynamic>? _merchant;
   bool _loading = true;
 
@@ -1125,8 +1338,12 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ref.read(apiClientProvider).get('/food/restaurants/${widget.merchantId}');
-      setState(() => _merchant = Map<String, dynamic>.from(res['merchant'] as Map));
+      final res = await ref
+          .read(apiClientProvider)
+          .get('/food/restaurants/${widget.merchantId}');
+      setState(
+        () => _merchant = Map<String, dynamic>.from(res['merchant'] as Map),
+      );
     } catch (_) {
       setState(() => _merchant = _getFallbackMerchant(widget.merchantId));
     } finally {
@@ -1207,15 +1424,24 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                            icon: const Icon(
+                              Icons.arrow_back_rounded,
+                              color: Colors.white,
+                            ),
                             onPressed: () => Navigator.pop(context),
                           ),
                           Expanded(
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               child: Text(
                                 m['businessName'].toString(),
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
@@ -1233,7 +1459,9 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
                         decoration: BoxDecoration(
                           color: TwoBeeColors.obsidianCard,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.3)),
+                          border: Border.all(
+                            color: TwoBeeColors.primary.withValues(alpha: 0.3),
+                          ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1241,7 +1469,10 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
                             Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: TwoBeeColors.primary,
                                     borderRadius: BorderRadius.circular(10),
@@ -1249,11 +1480,19 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.star_rounded, color: TwoBeeColors.obsidian, size: 14),
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        color: TwoBeeColors.obsidian,
+                                        size: 14,
+                                      ),
                                       const SizedBox(width: 4),
                                       Text(
                                         '${m['rating'] ?? 4.8}',
-                                        style: const TextStyle(fontWeight: FontWeight.w900, color: TwoBeeColors.obsidian, fontSize: 12),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          color: TwoBeeColors.obsidian,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1261,38 +1500,63 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
                                 const SizedBox(width: 8),
                                 Text(
                                   '⏱ ${m['avgPrepMins'] ?? 22} mins',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   '• Delivery ${bdt(m['deliveryFeeBdt'] ?? 45)}',
-                                  style: const TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w700, fontSize: 12),
+                                  style: const TextStyle(
+                                    color: TwoBeeColors.primarySoft,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              isHk ? 'Home Kitchen Certified · Fresh Cooked on Demand' : 'Physical Restaurant · Official 2Bee Partner',
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              isHk
+                                  ? 'Home Kitchen Certified · Fresh Cooked on Demand'
+                                  : 'Physical Restaurant · Official 2Bee Partner',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
                             if (isHk && m['remainingDailySlots'] != null) ...[
                               const SizedBox(height: 6),
                               Text(
                                 '🌿 Daily Slot Availability: ${m['remainingDailySlots']} left today (Cutoff ${m['dailyCutoffTime'] ?? '23:30'})',
-                                style: const TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w800, fontSize: 11),
+                                style: const TextStyle(
+                                  color: TwoBeeColors.primarySoft,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                ),
                               ),
                             ],
                             if (promos.isNotEmpty) ...[
                               const SizedBox(height: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFF9100).withValues(alpha: 0.2),
+                                  color: const Color(0xFFFF9100)
+                                      .withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
                                   '🏷️ Promo: ${promos.first['promoCode']} — Flat ৳${promos.first['discountValue'] ?? 100} off',
-                                  style: const TextStyle(color: Color(0xFFFFB74D), fontWeight: FontWeight.w800, fontSize: 11),
+                                  style: const TextStyle(
+                                    color: Color(0xFFFFB74D),
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1310,149 +1574,186 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
             sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, idx) {
-                  final cat = cats[idx];
-                  final items = (cat['items'] as List?) ?? [];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          cat['name'].toString().toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.8,
-                            color: TwoBeeColors.textSecondary,
-                          ),
+              delegate: SliverChildBuilderDelegate((context, idx) {
+                final cat = cats[idx];
+                final items = (cat['items'] as List?) ?? [];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        cat['name'].toString().toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                          color: TwoBeeColors.textSecondary,
                         ),
                       ),
-                      ...items.map((item) {
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: TwoBeeColors.surfaceCard,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: TwoBeeShadows.softCard,
-                            border: Border.all(color: TwoBeeColors.borderSoft),
-                          ),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(20),
-                            onTap: item['inStock'] == true ? () => _openCustomization(item as Map) : null,
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: (item['imageUrl'] != null && item['imageUrl'].toString().isNotEmpty)
-                                        ? Image.network(
-                                            item['imageUrl'].toString(),
-                                            width: 76,
-                                            height: 76,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) => _dishThumbnailFallback(isHk),
-                                          )
-                                        : _dishThumbnailFallback(isHk),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                item['name'].toString(),
-                                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-                                              ),
-                                            ),
-                                            if (item['isBestseller'] == true)
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: TwoBeeColors.primary.withValues(alpha: 0.15),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                ),
-                                                child: const Text(
-                                                  '★ Popular',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: TwoBeeColors.primary,
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        if (item['description'] != null && item['description'].toString().isNotEmpty) ...[
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            item['description'].toString(),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary),
-                                          ),
-                                        ],
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              bdt(item['priceBdt'] as num),
+                    ),
+                    ...items.map((item) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: TwoBeeColors.surfaceCard,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: TwoBeeShadows.softCard,
+                          border: Border.all(color: TwoBeeColors.borderSoft),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: item['inStock'] == true
+                              ? () => _openCustomization(item as Map)
+                              : null,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child:
+                                      (item['imageUrl'] != null &&
+                                          item['imageUrl']
+                                              .toString()
+                                              .isNotEmpty)
+                                      ? Image.network(
+                                          item['imageUrl'].toString(),
+                                          width: 76,
+                                          height: 76,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (
+                                            context,
+                                            error,
+                                            stackTrace,
+                                          ) => _dishThumbnailFallback(isHk),
+                                        )
+                                      : _dishThumbnailFallback(isHk),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              item['name'].toString(),
                                               style: const TextStyle(
-                                                fontWeight: FontWeight.w900,
+                                                fontWeight: FontWeight.w800,
                                                 fontSize: 15,
-                                                color: TwoBeeColors.primary,
                                               ),
                                             ),
-                                            if (item['strikePriceBdt'] != null) ...[
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                bdt(item['strikePriceBdt'] as num),
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  color: TwoBeeColors.textSecondary,
-                                                  decoration: TextDecoration.lineThrough,
-                                                ),
-                                              ),
-                                            ],
-                                            const Spacer(),
+                                          ),
+                                          if (item['isBestseller'] == true)
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: item['inStock'] == true ? TwoBeeColors.obsidian : Colors.grey.shade300,
-                                                borderRadius: TwoBeeRadii.pill,
+                                                color: TwoBeeColors.primary
+                                                    .withValues(alpha: 0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
                                               ),
-                                              child: Text(
-                                                item['inStock'] == true ? '+ Add' : 'Out',
+                                              child: const Text(
+                                                '★ Popular',
                                                 style: TextStyle(
-                                                  fontSize: 12,
+                                                  fontSize: 10,
                                                   fontWeight: FontWeight.w800,
-                                                  color: item['inStock'] == true ? Colors.white : Colors.grey.shade600,
+                                                  color: TwoBeeColors.primary,
                                                 ),
                                               ),
                                             ),
-                                          ],
+                                        ],
+                                      ),
+                                      if (item['description'] != null &&
+                                          item['description']
+                                              .toString()
+                                              .isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          item['description'].toString(),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: TwoBeeColors.textSecondary,
+                                          ),
                                         ),
                                       ],
-                                    ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            bdt(item['priceBdt'] as num),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 15,
+                                              color: TwoBeeColors.primary,
+                                            ),
+                                          ),
+                                          if (item['strikePriceBdt'] !=
+                                              null) ...[
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              bdt(
+                                                item['strikePriceBdt'] as num,
+                                              ),
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color:
+                                                    TwoBeeColors.textSecondary,
+                                                decoration:
+                                                    TextDecoration.lineThrough,
+                                              ),
+                                            ),
+                                          ],
+                                          const Spacer(),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 14,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: item['inStock'] == true
+                                                  ? TwoBeeColors.obsidian
+                                                  : Colors.grey.shade300,
+                                              borderRadius: TwoBeeRadii.pill,
+                                            ),
+                                            child: Text(
+                                              item['inStock'] == true
+                                                  ? '+ Add'
+                                                  : 'Out',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800,
+                                                color: item['inStock'] == true
+                                                    ? Colors.white
+                                                    : Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
-                        );
-                      }),
-                      const SizedBox(height: 12),
-                    ],
-                  );
-                },
-                childCount: cats.length,
-              ),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 12),
+                  ],
+                );
+              }, childCount: cats.length),
             ),
           ),
         ],
@@ -1462,7 +1763,10 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
               top: false,
               child: Container(
                 height: 76,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: const BoxDecoration(
                   color: TwoBeeColors.obsidian,
                   borderRadius: TwoBeeRadii.sheetTop,
@@ -1477,11 +1781,19 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
                         children: [
                           Text(
                             '${cart.totalItems} ITEMS IN CART',
-                            style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                           Text(
                             bdt(cart.subtotal),
-                            style: const TextStyle(color: TwoBeeColors.primarySoft, fontSize: 17, fontWeight: FontWeight.w900),
+                            style: const TextStyle(
+                              color: TwoBeeColors.primarySoft,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ],
                       ),
@@ -1491,12 +1803,23 @@ class _RestaurantDetailScreenState extends ConsumerState<RestaurantDetailScreen>
                         backgroundColor: TwoBeeColors.primary,
                         foregroundColor: TwoBeeColors.obsidian,
                         minimumSize: const Size(120, 42),
-                        shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: TwoBeeRadii.pill,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 10,
+                        ),
                       ),
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen())),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const CartScreen()),
+                      ),
                       icon: const Icon(Icons.shopping_bag_rounded, size: 18),
-                      label: const Text('View Cart ➔', style: TextStyle(fontWeight: FontWeight.w900)),
+                      label: const Text(
+                        'View Cart ➔',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
                     ),
                   ],
                 ),
@@ -1524,14 +1847,24 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final cart = ref.watch(cartProvider);
     if (cart.lines.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Your Cart'), actions: const [TwoBeeHomeAction()]),
+        appBar: AppBar(
+          title: const Text('Your Cart'),
+          actions: const [TwoBeeHomeAction()],
+        ),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: const [
-              Icon(Icons.shopping_bag_outlined, size: 64, color: TwoBeeColors.borderSoft),
+              Icon(
+                Icons.shopping_bag_outlined,
+                size: 64,
+                color: TwoBeeColors.borderSoft,
+              ),
               SizedBox(height: 12),
-              Text('Your cart is empty', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              Text(
+                'Your cart is empty',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
             ],
           ),
         ),
@@ -1566,9 +1899,21 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(l.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                        Text(
+                          l.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Text('${bdt(l.unitPrice)} each', style: const TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary)),
+                        Text(
+                          '${bdt(l.unitPrice)} each',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: TwoBeeColors.textSecondary,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1576,13 +1921,27 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        onPressed: () => ref.read(cartProvider.notifier).updateQty(i, -1),
-                        icon: const Icon(Icons.remove_circle_outline, color: TwoBeeColors.primary),
+                        onPressed: () =>
+                            ref.read(cartProvider.notifier).updateQty(i, -1),
+                        icon: const Icon(
+                          Icons.remove_circle_outline,
+                          color: TwoBeeColors.primary,
+                        ),
                       ),
-                      Text('${l.quantity}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                      Text(
+                        '${l.quantity}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
                       IconButton(
-                        onPressed: () => ref.read(cartProvider.notifier).updateQty(i, 1),
-                        icon: const Icon(Icons.add_circle_outline, color: TwoBeeColors.primary),
+                        onPressed: () =>
+                            ref.read(cartProvider.notifier).updateQty(i, 1),
+                        icon: const Icon(
+                          Icons.add_circle_outline,
+                          color: TwoBeeColors.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -1598,7 +1957,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 if (cart.merchantId != null) {
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (_) => RestaurantDetailScreen(merchantId: cart.merchantId!)),
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          RestaurantDetailScreen(merchantId: cart.merchantId!),
+                    ),
                   );
                 } else {
                   Navigator.pop(context);
@@ -1638,7 +2000,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                 onPressed: () {
                   ref.read(cartProvider.notifier).applyPromo(_promoCtrl.text);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Promo applied successfully!')),
+                    const SnackBar(
+                      content: Text('Promo applied successfully!'),
+                    ),
                   );
                 },
                 child: const Text('Apply'),
@@ -1656,7 +2020,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             child: Column(
               children: [
                 _BillRow('Subtotal', bdt(cart.subtotal)),
-                _BillRow('Delivery Fee (Zero-Emission EV)', bdt(cart.deliveryFee)),
+                _BillRow(
+                  'Delivery Fee (Zero-Emission EV)',
+                  bdt(cart.deliveryFee),
+                ),
                 _BillRow('Packaging & Service', bdt(25)),
                 const Divider(),
                 _BillRow('Estimated Total', bdt(total), bold: true),
@@ -1673,9 +2040,14 @@ class _CartScreenState extends ConsumerState<CartScreen> {
             ),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => CheckoutScreen(cookingNote: _noteCtrl.text)),
+              MaterialPageRoute(
+                builder: (_) => CheckoutScreen(cookingNote: _noteCtrl.text),
+              ),
             ),
-            child: const Text('Proceed to Checkout ➔', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            child: const Text(
+              'Proceed to Checkout ➔',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+            ),
           ),
         ],
       ),
@@ -1696,8 +2068,20 @@ class _BillRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontWeight: bold ? FontWeight.w800 : FontWeight.w500, fontSize: bold ? 15 : 13)),
-          Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w900 : FontWeight.w700, fontSize: bold ? 15 : 13)),
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
+              fontSize: bold ? 15 : 13,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
+              fontSize: bold ? 15 : 13,
+            ),
+          ),
         ],
       ),
     );
@@ -1714,7 +2098,9 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 }
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
-  final _addressCtrl = TextEditingController(text: 'Road 11, Banani (House 42, Apt 3B)');
+  final _addressCtrl = TextEditingController(
+    text: 'Road 11, Banani (House 42, Apt 3B)',
+  );
   String _scheduleMode = 'NOW';
   String _selectedDay = 'Today';
   String _selectedSlot = '7:30 PM – 8:00 PM (Dinner)';
@@ -1732,28 +2118,46 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final cart = ref.read(cartProvider);
     final estTotal = cart.subtotal + cart.deliveryFee + 25;
     if (_payment == 'STRIPE_SANDBOX') {
-      final ok = await showStripeSandboxDialog(context, amountBdt: estTotal, title: 'Food · ${cart.merchantName}');
+      final ok = await showStripeSandboxDialog(
+        context,
+        amountBdt: estTotal,
+        title: 'Food · ${cart.merchantName}',
+      );
       if (!ok) return;
     }
 
     final isScheduled = _scheduleMode == 'SCHEDULED';
-    final scheduledTimeStr = isScheduled ? '$_selectedDay, $_selectedSlot' : null;
+    final scheduledTimeStr = isScheduled
+        ? '$_selectedDay, $_selectedSlot'
+        : null;
 
     setState(() => _loading = true);
     try {
-      final res = await ref.read(apiClientProvider).post('/food/orders/checkout', body: {
-        'merchantId': cart.merchantId ?? _fallbackRestaurants[0]['id'],
-        'items': cart.lines
-            .map((l) => {'menuItemId': l.menuItemId, 'quantity': l.quantity, 'selectedOptions': l.selectedOptions})
-            .toList(),
-        'deliveryAddress': _addressCtrl.text.trim(),
-        'scheduleMode': _scheduleMode,
-        'isScheduled': isScheduled,
-        'scheduledTime': scheduledTimeStr,
-        'cookingNote': widget.cookingNote,
-        if (cart.promoCode != null && cart.promoCode!.isNotEmpty) 'promoCode': cart.promoCode,
-        'paymentMethod': _payment,
-      });
+      final res = await ref
+          .read(apiClientProvider)
+          .post(
+            '/food/orders/checkout',
+            body: {
+              'merchantId': cart.merchantId ?? _fallbackRestaurants[0]['id'],
+              'items': cart.lines
+                  .map(
+                    (l) => {
+                      'menuItemId': l.menuItemId,
+                      'quantity': l.quantity,
+                      'selectedOptions': l.selectedOptions,
+                    },
+                  )
+                  .toList(),
+              'deliveryAddress': _addressCtrl.text.trim(),
+              'scheduleMode': _scheduleMode,
+              'isScheduled': isScheduled,
+              'scheduledTime': scheduledTimeStr,
+              'cookingNote': widget.cookingNote,
+              if (cart.promoCode != null && cart.promoCode!.isNotEmpty)
+                'promoCode': cart.promoCode,
+              'paymentMethod': _payment,
+            },
+          );
       ref.read(cartProvider.notifier).clear();
       if (!mounted) return;
       final order = Map<String, dynamic>.from(res['order'] as Map);
@@ -1780,13 +2184,25 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         'paymentMethod': _payment,
         'deliveryAddress': _addressCtrl.text.trim(),
         'deliveryPin': '4821',
-        'merchant': {'businessName': cart.merchantName ?? "Sultan's Dine Banani"},
-        'items': cart.lines.map((l) => {'itemName': l.name, 'quantity': l.quantity, 'lineTotalBdt': l.lineTotal}).toList(),
+        'merchant': {
+          'businessName': cart.merchantName ?? "Sultan's Dine Banani",
+        },
+        'items': cart.lines
+            .map(
+              (l) => {
+                'itemName': l.name,
+                'quantity': l.quantity,
+                'lineTotalBdt': l.lineTotal,
+              },
+            )
+            .toList(),
       };
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => FoodOrderPlacedScreen(order: mockOrder)),
+          MaterialPageRoute(
+            builder: (_) => FoodOrderPlacedScreen(order: mockOrder),
+          ),
           (r) => r.isFirst,
         );
       }
@@ -1799,7 +2215,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: TwoBeeColors.scaffoldBg,
-      appBar: AppBar(title: const Text('Checkout'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Checkout'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1813,12 +2232,22 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('DELIVERY ADDRESS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: TwoBeeColors.textSecondary)),
+                const Text(
+                  'DELIVERY ADDRESS',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    color: TwoBeeColors.textSecondary,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _addressCtrl,
                   decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.place_rounded, color: TwoBeeColors.primary),
+                    prefixIcon: Icon(
+                      Icons.place_rounded,
+                      color: TwoBeeColors.primary,
+                    ),
                   ),
                 ),
               ],
@@ -1828,7 +2257,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(value: 'NOW', label: Text('Deliver Now (25–35m)')),
-              ButtonSegment(value: 'SCHEDULED', label: Text('Schedule for Later')),
+              ButtonSegment(
+                value: 'SCHEDULED',
+                label: Text('Schedule for Later'),
+              ),
             ],
             selected: {_scheduleMode},
             onSelectionChanged: (v) => setState(() => _scheduleMode = v.first),
@@ -1848,46 +2280,83 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 children: [
                   Row(
                     children: const [
-                      Icon(Icons.calendar_month_rounded, color: TwoBeeColors.primary, size: 20),
+                      Icon(
+                        Icons.calendar_month_rounded,
+                        color: TwoBeeColors.primary,
+                        size: 20,
+                      ),
                       SizedBox(width: 8),
-                      Text('SCHEDULE DELIVERY TIME', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: TwoBeeColors.primary, letterSpacing: 0.6)),
+                      Text(
+                        'SCHEDULE DELIVERY TIME',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                          color: TwoBeeColors.primary,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text('Select Day:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: TwoBeeColors.textSecondary)),
+                  const Text(
+                    'Select Day:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color: TwoBeeColors.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
                       ChoiceChip(
                         label: const Text('Today'),
                         selected: _selectedDay == 'Today',
-                        onSelected: (s) => setState(() => _selectedDay = 'Today'),
+                        onSelected: (s) =>
+                            setState(() => _selectedDay = 'Today'),
                       ),
                       const SizedBox(width: 8),
                       ChoiceChip(
                         label: const Text('Tomorrow'),
                         selected: _selectedDay == 'Tomorrow',
-                        onSelected: (s) => setState(() => _selectedDay = 'Tomorrow'),
+                        onSelected: (s) =>
+                            setState(() => _selectedDay = 'Tomorrow'),
                       ),
                       const SizedBox(width: 8),
                       ChoiceChip(
                         label: const Text('Day After'),
                         selected: _selectedDay == 'Day After',
-                        onSelected: (s) => setState(() => _selectedDay = 'Day After'),
+                        onSelected: (s) =>
+                            setState(() => _selectedDay = 'Day After'),
                       ),
                     ],
                   ),
                   const SizedBox(height: 14),
-                  const Text('Select Time Window:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: TwoBeeColors.textSecondary)),
+                  const Text(
+                    'Select Time Window:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color: TwoBeeColors.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: _slots.map((s) => ChoiceChip(
-                      label: Text(s, style: const TextStyle(fontSize: 12)),
-                      selected: _selectedSlot == s,
-                      onSelected: (_) => setState(() => _selectedSlot = s),
-                    )).toList(),
+                    children: _slots
+                        .map(
+                          (s) => ChoiceChip(
+                            label: Text(
+                              s,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            selected: _selectedSlot == s,
+                            onSelected: (_) =>
+                                setState(() => _selectedSlot = s),
+                          ),
+                        )
+                        .toList(),
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -1898,12 +2367,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.eco_rounded, color: TwoBeeColors.primary, size: 18),
+                        const Icon(
+                          Icons.eco_rounded,
+                          color: TwoBeeColors.primary,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Order will be freshly prepared and dispatched via Glafit EV for $_selectedDay, $_selectedSlot.',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: TwoBeeColors.textPrimary),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: TwoBeeColors.textPrimary,
+                            ),
                           ),
                         ),
                       ],
@@ -1914,7 +2391,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             ),
           ],
           const SizedBox(height: 14),
-          PaymentSelectorCard(selectedMethod: _payment, onSelected: (m) => setState(() => _payment = m)),
+          PaymentSelectorCard(
+            selectedMethod: _payment,
+            onSelected: (m) => setState(() => _payment = m),
+          ),
           const SizedBox(height: 20),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -1927,7 +2407,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             child: Text(
               _loading
                   ? 'Placing Order...'
-                  : (_scheduleMode == 'SCHEDULED' ? 'Confirm Scheduled Order ➔' : 'Confirm & Place Order ➔'),
+                  : (_scheduleMode == 'SCHEDULED'
+                        ? 'Confirm Scheduled Order ➔'
+                        : 'Confirm & Place Order ➔'),
               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
             ),
           ),
@@ -1945,7 +2427,10 @@ class FoodOrderPlacedScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: TwoBeeColors.scaffoldBg,
-      appBar: AppBar(title: const Text('Order Placed'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Order Placed'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -1959,7 +2444,11 @@ class FoodOrderPlacedScreen extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: TwoBeeShadows.emeraldGlow,
               ),
-              child: const Icon(Icons.check_circle_rounded, color: TwoBeeColors.obsidian, size: 48),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                color: TwoBeeColors.obsidian,
+                size: 48,
+              ),
             ),
             const SizedBox(height: 20),
             Text(
@@ -1971,12 +2460,19 @@ class FoodOrderPlacedScreen extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Payment: ${order['paymentMethod']} · ${bdt(order['totalBdt'] as num)}',
-              style: const TextStyle(color: TwoBeeColors.textSecondary, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                color: TwoBeeColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            if (order['isScheduled'] == true && order['scheduledTime'] != null) ...[
+            if (order['isScheduled'] == true &&
+                order['scheduledTime'] != null) ...[
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: TwoBeeColors.primary.withValues(alpha: 0.15),
                   borderRadius: TwoBeeRadii.pill,
@@ -1985,11 +2481,19 @@ class FoodOrderPlacedScreen extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.schedule_rounded, color: TwoBeeColors.primary, size: 18),
+                    const Icon(
+                      Icons.schedule_rounded,
+                      color: TwoBeeColors.primary,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Delivery Window: ${order['scheduledTime']}',
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: TwoBeeColors.primary),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: TwoBeeColors.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -2006,7 +2510,10 @@ class FoodOrderPlacedScreen extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _StepDot(order['isScheduled'] == true ? 'Scheduled' : 'Confirmed', true),
+                  _StepDot(
+                    order['isScheduled'] == true ? 'Scheduled' : 'Confirmed',
+                    true,
+                  ),
                   const _StepDot('Cooking', false),
                   const _StepDot('Courier En-Route', false),
                   const _StepDot('Delivered', false),
@@ -2019,13 +2526,22 @@ class FoodOrderPlacedScreen extends StatelessWidget {
                 backgroundColor: TwoBeeColors.obsidian,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 16,
+                  horizontal: 32,
+                ),
               ),
               onPressed: () => Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => FoodLiveTrackingScreen(orderId: order['id'] as String)),
+                MaterialPageRoute(
+                  builder: (_) =>
+                      FoodLiveTrackingScreen(orderId: order['id'] as String),
+                ),
               ),
-              child: const Text('Track Live Food Order ➔', style: TextStyle(fontWeight: FontWeight.w800)),
+              child: const Text(
+                'Track Live Food Order ➔',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
             ),
             const SizedBox(height: 12),
             OutlinedButton(
@@ -2059,7 +2575,9 @@ class _StepDot extends StatelessWidget {
           style: TextStyle(
             fontSize: 11,
             fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-            color: active ? TwoBeeColors.textPrimary : TwoBeeColors.textSecondary,
+            color: active
+                ? TwoBeeColors.textPrimary
+                : TwoBeeColors.textSecondary,
           ),
         ),
       ],
@@ -2073,10 +2591,12 @@ class FoodLiveTrackingScreen extends ConsumerStatefulWidget {
   const FoodLiveTrackingScreen({super.key, required this.orderId});
 
   @override
-  ConsumerState<FoodLiveTrackingScreen> createState() => _FoodLiveTrackingScreenState();
+  ConsumerState<FoodLiveTrackingScreen> createState() =>
+      _FoodLiveTrackingScreenState();
 }
 
-class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen> {
+class _FoodLiveTrackingScreenState
+    extends ConsumerState<FoodLiveTrackingScreen> {
   Map<String, dynamic>? _order;
   double? _riderLat;
   double? _riderLng;
@@ -2122,7 +2642,9 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
 
   Future<void> _load() async {
     try {
-      final res = await ref.read(apiClientProvider).get('/food/orders/${widget.orderId}');
+      final res = await ref
+          .read(apiClientProvider)
+          .get('/food/orders/${widget.orderId}');
       final o = Map<String, dynamic>.from(res['order'] as Map);
       if (!mounted) return;
       setState(() {
@@ -2146,13 +2668,21 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
           'paymentMethod': 'COD',
           'deliveryAddress': 'Road 11, Banani (House 42, Apt 3B)',
           'deliveryPin': '4821',
-          'merchant': {'businessName': "Sultan's Dine Banani", 'lat': 23.7942, 'lng': 90.4071},
+          'merchant': {
+            'businessName': "Sultan's Dine Banani",
+            'lat': 23.7942,
+            'lng': 90.4071,
+          },
           'rider': {
             'user': {'fullName': 'Shakil Hasan', 'phone': '+8801733333333'},
             'vehicleBrandModel': 'Glafit GFR-02 EV Bike',
           },
           'items': [
-            {'itemName': 'Basmati Kacchi Biryani (Full)', 'quantity': 1, 'lineTotalBdt': 380},
+            {
+              'itemName': 'Basmati Kacchi Biryani (Full)',
+              'quantity': 1,
+              'lineTotalBdt': 380,
+            },
           ],
         };
       });
@@ -2163,7 +2693,9 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
 
   Future<void> _advanceDemo() async {
     try {
-      await ref.read(apiClientProvider).post('/common/demo/advance-food/${widget.orderId}');
+      await ref
+          .read(apiClientProvider)
+          .post('/common/demo/advance-food/${widget.orderId}');
     } catch (_) {}
 
     if (_order != null) {
@@ -2171,10 +2703,10 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
       final next = curr == 'CONFIRMED'
           ? 'PREPARING'
           : curr == 'PREPARING'
-              ? 'RIDER_ASSIGNED'
-              : curr == 'RIDER_ASSIGNED'
-                  ? 'PICKED_UP'
-                  : 'DELIVERED';
+          ? 'RIDER_ASSIGNED'
+          : curr == 'RIDER_ASSIGNED'
+          ? 'PICKED_UP'
+          : 'DELIVERED';
       setState(() {
         _order = Map<String, dynamic>.from(_order!)..['status'] = next;
       });
@@ -2187,26 +2719,34 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
     if (_order == null) return;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => FoodDeliveredRatingScreen(order: _order!)),
+      MaterialPageRoute(
+        builder: (_) => FoodDeliveredRatingScreen(order: _order!),
+      ),
     );
     _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading && _order == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_loading && _order == null)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final o = _order!;
     final items = (o['items'] as List?) ?? [];
     final sync = ref.watch(foodOrderSyncProvider);
     final isSyncActive = sync.status != 'PLACED';
-    final effectiveStatus = isSyncActive ? sync.status : (o['status'] as String? ?? 'CONFIRMED');
+    final effectiveStatus = isSyncActive
+        ? sync.status
+        : (o['status'] as String? ?? 'CONFIRMED');
     final status = effectiveStatus;
     final isOutForDelivery = effectiveStatus == 'PICKED_UP';
     final isPreparing = effectiveStatus == 'PREPARING';
 
     return Scaffold(
       backgroundColor: TwoBeeColors.scaffoldBg,
-      appBar: AppBar(title: Text('Track ${o['orderCode'] ?? ''}'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: Text('Track ${o['orderCode'] ?? ''}'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -2217,13 +2757,18 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                 orderState: sync,
                 height: 240,
                 showTurnByTurnBanner: true,
-                onToggleSimulation: () => ref.read(foodOrderSyncProvider.notifier).toggleSimulation(),
-                onStepForward: () => ref.read(foodOrderSyncProvider.notifier).advanceRiderProgress(0.12),
+                onToggleSimulation: () =>
+                    ref.read(foodOrderSyncProvider.notifier).toggleSimulation(),
+                onStepForward: () => ref
+                    .read(foodOrderSyncProvider.notifier)
+                    .advanceRiderProgress(0.12),
               ),
             ] else ...[
               TwoBeeMapPreview(
-                pickupLat: (o['merchant']?['lat'] as num?)?.toDouble() ?? 23.7942,
-                pickupLng: (o['merchant']?['lng'] as num?)?.toDouble() ?? 90.4071,
+                pickupLat:
+                    (o['merchant']?['lat'] as num?)?.toDouble() ?? 23.7942,
+                pickupLng:
+                    (o['merchant']?['lng'] as num?)?.toDouble() ?? 90.4071,
                 dropoffLat: (o['deliveryLat'] as num?)?.toDouble() ?? 23.7937,
                 dropoffLng: (o['deliveryLng'] as num?)?.toDouble() ?? 90.4066,
                 riderLat: _riderLat,
@@ -2238,7 +2783,9 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                 decoration: BoxDecoration(
                   color: TwoBeeColors.surfaceTonal,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: TwoBeeColors.primary.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -2248,27 +2795,55 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                         color: TwoBeeColors.primaryDark,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.soup_kitchen_rounded, color: Colors.white, size: 22),
+                      child: const Icon(
+                        Icons.soup_kitchen_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('RESTAURANT IS PREPARING YOUR ORDER', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: TwoBeeColors.primaryDark)),
+                          const Text(
+                            'RESTAURANT IS PREPARING YOUR ORDER',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                              color: TwoBeeColors.primaryDark,
+                            ),
+                          ),
                           const SizedBox(height: 2),
                           Row(
                             children: [
                               Text(
                                 sync.formattedPrepTimer,
-                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: TwoBeeColors.textPrimary),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 20,
+                                  color: TwoBeeColors.textPrimary,
+                                ),
                               ),
                               const SizedBox(width: 6),
-                              const Text('remaining until handover', style: TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary, fontWeight: FontWeight.w600)),
+                              const Text(
+                                'remaining until handover',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: TwoBeeColors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 2),
-                          const Text('Chef is preparing fresh ingredients. Courier will pick up as soon as packed.', style: TextStyle(fontSize: 11, color: TwoBeeColors.textSecondary)),
+                          const Text(
+                            'Chef is preparing fresh ingredients. Courier will pick up as soon as packed.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: TwoBeeColors.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -2278,22 +2853,36 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
               const SizedBox(height: 14),
             ],
 
-            if (o['isScheduled'] == true || o['scheduleMode'] == 'SCHEDULED') ...[
+            if (o['isScheduled'] == true ||
+                o['scheduleMode'] == 'SCHEDULED') ...[
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: TwoBeeColors.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.5)),
+                  border: Border.all(
+                    color: TwoBeeColors.primary.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.schedule_rounded, color: TwoBeeColors.primary, size: 20),
+                    const Icon(
+                      Icons.schedule_rounded,
+                      color: TwoBeeColors.primary,
+                      size: 20,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Scheduled for: ${o['scheduledTime'] ?? 'Today, 7:30 PM – 8:00 PM'}',
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: TwoBeeColors.primary),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          color: TwoBeeColors.primary,
+                        ),
                       ),
                     ),
                   ],
@@ -2313,7 +2902,10 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: TwoBeeColors.primary,
                       borderRadius: BorderRadius.circular(12),
@@ -2321,10 +2913,22 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('HANDOVER PIN', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: TwoBeeColors.obsidian)),
+                        const Text(
+                          'HANDOVER PIN',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            color: TwoBeeColors.obsidian,
+                          ),
+                        ),
                         Text(
                           o['deliveryPin']?.toString() ?? '4821',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: TwoBeeColors.obsidian, letterSpacing: 2),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: TwoBeeColors.obsidian,
+                            letterSpacing: 2,
+                          ),
                         ),
                       ],
                     ),
@@ -2338,20 +2942,27 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                           isOutForDelivery
                               ? 'HANDED OVER TO RIDER · OUT FOR DELIVERY'
                               : isPreparing
-                                  ? 'STAGE: PREPARING IN KITCHEN'
-                                  : 'STAGE: $effectiveStatus',
-                          style: const TextStyle(color: TwoBeeColors.primarySoft, fontWeight: FontWeight.w900, fontSize: 12),
+                              ? 'STAGE: PREPARING IN KITCHEN'
+                              : 'STAGE: $effectiveStatus',
+                          style: const TextStyle(
+                            color: TwoBeeColors.primarySoft,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           effectiveStatus == 'DELIVERED'
                               ? 'Meal Delivered! Enjoy your food.'
                               : isOutForDelivery
-                                  ? 'Rider is on the way on Glafit EV Bike (${sync.distanceRemainingFormatted})'
-                                  : isPreparing
-                                      ? 'Food is cooking in kitchen (${sync.formattedPrepTimer})'
-                                      : 'Doorstep Courier on Glafit EV Bike',
-                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                              ? 'Rider is on the way on Glafit EV Bike (${sync.distanceRemainingFormatted})'
+                              : isPreparing
+                              ? 'Food is cooking in kitchen (${sync.formattedPrepTimer})'
+                              : 'Doorstep Courier on Glafit EV Bike',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                          ),
                         ),
                       ],
                     ),
@@ -2374,20 +2985,36 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                   children: [
                     const CircleAvatar(
                       backgroundColor: TwoBeeColors.surfaceTonal,
-                      child: Icon(Icons.electric_moped_rounded, color: TwoBeeColors.primary),
+                      child: Icon(
+                        Icons.electric_moped_rounded,
+                        color: TwoBeeColors.primary,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(o['rider']['user']['fullName'] ?? 'EV Courier', style: const TextStyle(fontWeight: FontWeight.w800)),
-                          Text(o['rider']['vehicleBrandModel'] ?? 'Glafit GFR-02 EV Bike', style: const TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary)),
+                          Text(
+                            o['rider']['user']['fullName'] ?? 'EV Courier',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          Text(
+                            o['rider']['vehicleBrandModel'] ??
+                                'Glafit GFR-02 EV Bike',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: TwoBeeColors.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.chat_outlined, color: TwoBeeColors.primary),
+                      icon: const Icon(
+                        Icons.chat_outlined,
+                        color: TwoBeeColors.primary,
+                      ),
                       onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -2415,11 +3042,23 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Order Receipt', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                  const Text(
+                    'Order Receipt',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
                   const SizedBox(height: 8),
-                  ...items.map((i) => _BillRow('${i['quantity']}x ${i['itemName']}', bdt(i['lineTotalBdt'] as num))),
+                  ...items.map(
+                    (i) => _BillRow(
+                      '${i['quantity']}x ${i['itemName']}',
+                      bdt(i['lineTotalBdt'] as num),
+                    ),
+                  ),
                   const Divider(),
-                  _BillRow('Total Paid (${o['paymentMethod']})', bdt(o['totalBdt'] as num), bold: true),
+                  _BillRow(
+                    'Total Paid (${o['paymentMethod']})',
+                    bdt(o['totalBdt'] as num),
+                    bold: true,
+                  ),
                 ],
               ),
             ),
@@ -2436,7 +3075,10 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                 ),
                 onPressed: _advanceDemo,
                 icon: const Icon(Icons.fast_forward_rounded),
-                label: const Text('Preview: Simulate Next Order Stage ➔', style: TextStyle(fontWeight: FontWeight.w800)),
+                label: const Text(
+                  'Preview: Simulate Next Order Stage ➔',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
             if (status == 'DELIVERED')
               ElevatedButton(
@@ -2447,7 +3089,10 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 onPressed: _rateFood,
-                child: const Text('Rate Food & Courier / View Order Detail ➔', style: TextStyle(fontWeight: FontWeight.w900)),
+                child: const Text(
+                  'Rate Food & Courier / View Order Detail ➔',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
               ),
           ],
         ),
@@ -2460,13 +3105,19 @@ class _FoodLiveTrackingScreenState extends ConsumerState<FoodLiveTrackingScreen>
 class ItemCustomizationScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> merchant;
   final Map<String, dynamic> item;
-  const ItemCustomizationScreen({super.key, required this.merchant, required this.item});
+  const ItemCustomizationScreen({
+    super.key,
+    required this.merchant,
+    required this.item,
+  });
 
   @override
-  ConsumerState<ItemCustomizationScreen> createState() => _ItemCustomizationScreenState();
+  ConsumerState<ItemCustomizationScreen> createState() =>
+      _ItemCustomizationScreenState();
 }
 
-class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScreen> {
+class _ItemCustomizationScreenState
+    extends ConsumerState<ItemCustomizationScreen> {
   final Map<String, List<Map<String, dynamic>>> _selected = {};
   final _noteCtrl = TextEditingController();
   int _qty = 1;
@@ -2479,7 +3130,9 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
       if (g['required'] == true) {
         final opts = (g['options'] as List?) ?? [];
         if (opts.isNotEmpty) {
-          _selected[g['title'] as String] = [Map<String, dynamic>.from(opts.first as Map)];
+          _selected[g['title'] as String] = [
+            Map<String, dynamic>.from(opts.first as Map),
+          ];
         }
       }
     }
@@ -2507,10 +3160,7 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
       backgroundColor: TwoBeeColors.scaffoldBg,
       appBar: AppBar(
         title: Text(item['name'].toString()),
-        actions: const [
-          TwoBeeCartAction(),
-          TwoBeeHomeAction(),
-        ],
+        actions: const [TwoBeeCartAction(), TwoBeeHomeAction()],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -2527,19 +3177,30 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
               children: [
                 Text(
                   item['name'].toString(),
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-                if (item['description'] != null && item['description'].toString().isNotEmpty) ...[
+                if (item['description'] != null &&
+                    item['description'].toString().isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
                     item['description'].toString(),
-                    style: const TextStyle(color: TwoBeeColors.textSecondary, fontSize: 13),
+                    style: const TextStyle(
+                      color: TwoBeeColors.textSecondary,
+                      fontSize: 13,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 10),
                 Text(
                   'Price: ${bdt(item['priceBdt'] as num)}',
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: TwoBeeColors.primary),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    color: TwoBeeColors.primary,
+                  ),
                 ),
               ],
             ),
@@ -2549,7 +3210,10 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
             for (final g in groups) ...[
               Text(
                 '${g['title']} ${g['required'] == true ? '(Required)' : '(Optional)'}',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
               ),
               const SizedBox(height: 6),
               Card(
@@ -2559,19 +3223,33 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
                     for (final opt in (g['options'] as List))
                       CheckboxListTile(
                         title: Text(
-                          (opt['extraBdt'] as num) > 0 ? '${opt['name']} (+${bdt(opt['extraBdt'] as num)})' : '${opt['name']}',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                          (opt['extraBdt'] as num) > 0
+                              ? '${opt['name']} (+${bdt(opt['extraBdt'] as num)})'
+                              : '${opt['name']}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                        value: (_selected[g['title']] ?? []).any((o) => o['id'] == opt['id']),
+                        value: (_selected[g['title']] ?? []).any(
+                          (o) => o['id'] == opt['id'],
+                        ),
                         onChanged: (v) {
                           setState(() {
                             final list = _selected[g['title']] ?? [];
                             if (g['required'] == true) {
-                              _selected[g['title'] as String] = [Map<String, dynamic>.from(opt as Map)];
+                              _selected[g['title'] as String] = [
+                                Map<String, dynamic>.from(opt as Map),
+                              ];
                             } else if (v == true) {
-                              _selected[g['title'] as String] = [...list, Map<String, dynamic>.from(opt as Map)];
+                              _selected[g['title'] as String] = [
+                                ...list,
+                                Map<String, dynamic>.from(opt as Map),
+                              ];
                             } else {
-                              _selected[g['title'] as String] = list.where((o) => o['id'] != opt['id']).toList();
+                              _selected[g['title'] as String] = list
+                                  .where((o) => o['id'] != opt['id'])
+                                  .toList();
                             }
                           });
                         },
@@ -2593,15 +3271,29 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
             children: [
               IconButton(
                 onPressed: () => setState(() => _qty = (_qty - 1).clamp(1, 20)),
-                icon: const Icon(Icons.remove_circle_outline, size: 32, color: TwoBeeColors.primary),
+                icon: const Icon(
+                  Icons.remove_circle_outline,
+                  size: 32,
+                  color: TwoBeeColors.primary,
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 18),
-                child: Text('$_qty', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                child: Text(
+                  '$_qty',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
               IconButton(
                 onPressed: () => setState(() => _qty++),
-                icon: const Icon(Icons.add_circle_outline, size: 32, color: TwoBeeColors.primary),
+                icon: const Icon(
+                  Icons.add_circle_outline,
+                  size: 32,
+                  color: TwoBeeColors.primary,
+                ),
               ),
             ],
           ),
@@ -2618,9 +3310,17 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
             onPressed: () async {
-              final missing = groups.any((g) => g['required'] == true && (_selected[g['title']]?.isEmpty ?? true));
+              final missing = groups.any(
+                (g) =>
+                    g['required'] == true &&
+                    (_selected[g['title']]?.isEmpty ?? true),
+              );
               if (missing) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select required options')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please select required options'),
+                  ),
+                );
                 return;
               }
               final currentCart = ref.read(cartProvider);
@@ -2632,15 +3332,23 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
                   context: context,
                   barrierDismissible: false,
                   builder: (dialogCtx) => AlertDialog(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
                     title: const Row(
                       children: [
-                        Icon(Icons.storefront_rounded, color: TwoBeeColors.primary),
+                        Icon(
+                          Icons.storefront_rounded,
+                          color: TwoBeeColors.primary,
+                        ),
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Replace Cart Items?',
-                            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
                       ],
@@ -2652,16 +3360,27 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(dialogCtx, false),
-                        child: const Text('Keep Old Order', style: TextStyle(color: TwoBeeColors.textSecondary, fontWeight: FontWeight.w700)),
+                        child: const Text(
+                          'Keep Old Order',
+                          style: TextStyle(
+                            color: TwoBeeColors.textSecondary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: TwoBeeColors.primary,
                           foregroundColor: TwoBeeColors.obsidian,
-                          shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: TwoBeeRadii.pill,
+                          ),
                         ),
                         onPressed: () => Navigator.pop(dialogCtx, true),
-                        child: const Text('Discard & Add New', style: TextStyle(fontWeight: FontWeight.w900)),
+                        child: const Text(
+                          'Discard & Add New',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
                       ),
                     ],
                   ),
@@ -2671,18 +3390,34 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
               }
 
               final opts = _selected.entries
-                  .expand((e) => e.value.map((o) => {'group': e.key, 'name': o['name'], 'extraBdt': o['extraBdt']}))
+                  .expand(
+                    (e) => e.value.map(
+                      (o) => {
+                        'group': e.key,
+                        'name': o['name'],
+                        'extraBdt': o['extraBdt'],
+                      },
+                    ),
+                  )
                   .toList();
               final deliveryFeeVal = widget.merchant['deliveryFeeBdt'] is num
                   ? (widget.merchant['deliveryFeeBdt'] as num).toDouble()
-                  : (double.tryParse(widget.merchant['deliveryFeeBdt']?.toString() ?? '40') ?? 40.0);
+                  : (double.tryParse(
+                          widget.merchant['deliveryFeeBdt']?.toString() ?? '40',
+                        ) ??
+                        40.0);
               final basePriceVal = item['priceBdt'] is num
                   ? (item['priceBdt'] as num).toDouble()
-                  : (double.tryParse(item['priceBdt']?.toString() ?? '200') ?? 200.0);
+                  : (double.tryParse(item['priceBdt']?.toString() ?? '200') ??
+                        200.0);
 
-              ref.read(cartProvider.notifier).addItem(
+              ref
+                  .read(cartProvider.notifier)
+                  .addItem(
                     merchantId: currentMerchantId,
-                    merchantName: widget.merchant['businessName']?.toString() ?? 'Kitchen',
+                    merchantName:
+                        widget.merchant['businessName']?.toString() ??
+                        'Kitchen',
                     deliveryFee: deliveryFeeVal,
                     line: CartLine(
                       menuItemId: item['id']?.toString() ?? 'item-1',
@@ -2696,7 +3431,10 @@ class _ItemCustomizationScreenState extends ConsumerState<ItemCustomizationScree
               if (!context.mounted) return;
               Navigator.pop(context, true);
             },
-            child: Text('Add to Cart · ${bdt(lineTotal)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            child: Text(
+              'Add to Cart · ${bdt(lineTotal)}',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+            ),
           ),
         ),
       ),
@@ -2710,10 +3448,12 @@ class FoodDeliveredRatingScreen extends ConsumerStatefulWidget {
   const FoodDeliveredRatingScreen({super.key, required this.order});
 
   @override
-  ConsumerState<FoodDeliveredRatingScreen> createState() => _FoodDeliveredRatingScreenState();
+  ConsumerState<FoodDeliveredRatingScreen> createState() =>
+      _FoodDeliveredRatingScreenState();
 }
 
-class _FoodDeliveredRatingScreenState extends ConsumerState<FoodDeliveredRatingScreen> {
+class _FoodDeliveredRatingScreenState
+    extends ConsumerState<FoodDeliveredRatingScreen> {
   int _restStars = 5;
   int _riderStars = 5;
   num _tip = 20;
@@ -2726,7 +3466,10 @@ class _FoodDeliveredRatingScreenState extends ConsumerState<FoodDeliveredRatingS
     final o = widget.order;
     return Scaffold(
       backgroundColor: TwoBeeColors.scaffoldBg,
-      appBar: AppBar(title: const Text('Rating & Feedback'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: const Text('Rating & Feedback'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -2738,7 +3481,11 @@ class _FoodDeliveredRatingScreenState extends ConsumerState<FoodDeliveredRatingS
                 color: Color(0xFFE8F5E9),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.restaurant_rounded, color: TwoBeeColors.primary, size: 36),
+              child: const Icon(
+                Icons.restaurant_rounded,
+                color: TwoBeeColors.primary,
+                size: 36,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -2757,26 +3504,40 @@ class _FoodDeliveredRatingScreenState extends ConsumerState<FoodDeliveredRatingS
             ),
             child: Column(
               children: [
-                const Text('Rate Food Quality', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text(
+                  'Rate Food Quality',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(
                     5,
                     (i) => IconButton(
                       onPressed: () => setState(() => _restStars = i + 1),
-                      icon: Icon(i < _restStars ? Icons.star : Icons.star_border, color: Colors.amber, size: 32),
+                      icon: Icon(
+                        i < _restStars ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: 32,
+                      ),
                     ),
                   ),
                 ),
                 const Divider(),
-                const Text('Rate EV Courier Speed', style: TextStyle(fontWeight: FontWeight.w800)),
+                const Text(
+                  'Rate EV Courier Speed',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(
                     5,
                     (i) => IconButton(
                       onPressed: () => setState(() => _riderStars = i + 1),
-                      icon: Icon(i < _riderStars ? Icons.star : Icons.star_border, color: Colors.amber, size: 32),
+                      icon: Icon(
+                        i < _riderStars ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: 32,
+                      ),
                     ),
                   ),
                 ),
@@ -2787,23 +3548,46 @@ class _FoodDeliveredRatingScreenState extends ConsumerState<FoodDeliveredRatingS
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: ['Fresh & Hot', 'Great Packaging', 'Fast Courier', 'Polite Handover'].map((t) {
-              return FilterChip(
-                label: Text(t),
-                selected: _tags.contains(t),
-                onSelected: (v) => setState(() => v ? _tags.add(t) : _tags.remove(t)),
-              );
-            }).toList(),
+            children:
+                [
+                  'Fresh & Hot',
+                  'Great Packaging',
+                  'Fast Courier',
+                  'Polite Handover',
+                ].map((t) {
+                  return FilterChip(
+                    label: Text(t),
+                    selected: _tags.contains(t),
+                    onSelected: (v) =>
+                        setState(() => v ? _tags.add(t) : _tags.remove(t)),
+                  );
+                }).toList(),
           ),
           const SizedBox(height: 14),
-          const Text('Tip Your EV Courier', style: TextStyle(fontWeight: FontWeight.w800)),
+          const Text(
+            'Tip Your EV Courier',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 6),
           Wrap(
             spacing: 8,
-            children: [0, 10, 20, 50].map((t) => ChoiceChip(label: Text(t == 0 ? 'No Tip' : bdt(t)), selected: _tip == t, onSelected: (_) => setState(() => _tip = t))).toList(),
+            children: [0, 10, 20, 50]
+                .map(
+                  (t) => ChoiceChip(
+                    label: Text(t == 0 ? 'No Tip' : bdt(t)),
+                    selected: _tip == t,
+                    onSelected: (_) => setState(() => _tip = t),
+                  ),
+                )
+                .toList(),
           ),
           const SizedBox(height: 14),
-          TextField(controller: _commentCtrl, decoration: const InputDecoration(labelText: 'Additional feedback (optional)')),
+          TextField(
+            controller: _commentCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Additional feedback (optional)',
+            ),
+          ),
           const SizedBox(height: 20),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -2817,21 +3601,35 @@ class _FoodDeliveredRatingScreenState extends ConsumerState<FoodDeliveredRatingS
                 : () async {
                     setState(() => _saving = true);
                     try {
-                      await ref.read(apiClientProvider).post('/food/orders/${o['id']}/rate', body: {
-                        'restaurantRating': _restStars,
-                        'riderRating': _riderStars,
-                        'tipBdt': _tip,
-                        'comment': '${_tags.join(", ")} ${_commentCtrl.text.trim()}'.trim(),
-                      });
+                      await ref
+                          .read(apiClientProvider)
+                          .post(
+                            '/food/orders/${o['id']}/rate',
+                            body: {
+                              'restaurantRating': _restStars,
+                              'riderRating': _riderStars,
+                              'tipBdt': _tip,
+                              'comment':
+                                  '${_tags.join(", ")} ${_commentCtrl.text.trim()}'
+                                      .trim(),
+                            },
+                          );
                     } catch (_) {}
                     if (context.mounted) {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(builder: (_) => ClientOrderDetailScreen(orderId: o['id'] as String)),
+                        MaterialPageRoute(
+                          builder: (_) => ClientOrderDetailScreen(
+                            orderId: o['id'] as String,
+                          ),
+                        ),
                       );
                     }
                   },
-            child: Text(_saving ? 'Submitting...' : 'Submit Review ➔ Order Detail', style: const TextStyle(fontWeight: FontWeight.w900)),
+            child: Text(
+              _saving ? 'Submitting...' : 'Submit Review ➔ Order Detail',
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
           ),
         ],
       ),
@@ -2845,10 +3643,12 @@ class ClientOrderDetailScreen extends ConsumerStatefulWidget {
   const ClientOrderDetailScreen({super.key, required this.orderId});
 
   @override
-  ConsumerState<ClientOrderDetailScreen> createState() => _ClientOrderDetailScreenState();
+  ConsumerState<ClientOrderDetailScreen> createState() =>
+      _ClientOrderDetailScreenState();
 }
 
-class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScreen> {
+class _ClientOrderDetailScreenState
+    extends ConsumerState<ClientOrderDetailScreen> {
   Map<String, dynamic>? _order;
   bool _loading = true;
 
@@ -2860,7 +3660,9 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
 
   Future<void> _load() async {
     try {
-      final res = await ref.read(apiClientProvider).get('/food/orders/${widget.orderId}');
+      final res = await ref
+          .read(apiClientProvider)
+          .get('/food/orders/${widget.orderId}');
       setState(() => _order = Map<String, dynamic>.from(res['order'] as Map));
     } catch (_) {
       setState(() {
@@ -2878,7 +3680,11 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
           'deliveryAddress': 'Road 11, Banani (House 42, Apt 3B)',
           'merchant': {'businessName': "Sultan's Dine Banani"},
           'items': [
-            {'itemName': 'Basmati Kacchi Biryani (Full)', 'quantity': 1, 'lineTotalBdt': 380},
+            {
+              'itemName': 'Basmati Kacchi Biryani (Full)',
+              'quantity': 1,
+              'lineTotalBdt': 380,
+            },
           ],
         };
       });
@@ -2889,14 +3695,18 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
 
   @override
   Widget build(BuildContext context) {
-    if (_loading && _order == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_loading && _order == null)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final o = _order!;
     final items = (o['items'] as List?) ?? [];
     final m = o['merchant'] as Map?;
 
     return Scaffold(
       backgroundColor: TwoBeeColors.scaffoldBg,
-      appBar: AppBar(title: Text('Order ${o['orderCode'] ?? ''}'), actions: const [TwoBeeHomeAction()]),
+      appBar: AppBar(
+        title: Text('Order ${o['orderCode'] ?? ''}'),
+        actions: const [TwoBeeHomeAction()],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -2908,18 +3718,43 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
             ),
             child: Row(
               children: [
-                const Icon(Icons.receipt_long_rounded, color: TwoBeeColors.primary, size: 28),
+                const Icon(
+                  Icons.receipt_long_rounded,
+                  color: TwoBeeColors.primary,
+                  size: 28,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(m?['businessName']?.toString() ?? "Sultan's Dine Banani", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-                      Text('Status: ${o['status']} · Doorstep Delivered', style: const TextStyle(color: TwoBeeColors.primarySoft, fontSize: 12)),
+                      Text(
+                        m?['businessName']?.toString() ??
+                            "Sultan's Dine Banani",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        'Status: ${o['status']} · Doorstep Delivered',
+                        style: const TextStyle(
+                          color: TwoBeeColors.primarySoft,
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                Text(bdt(o['totalBdt'] as num), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
+                Text(
+                  bdt(o['totalBdt'] as num),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
+                  ),
+                ),
               ],
             ),
           ),
@@ -2934,11 +3769,23 @@ class _ClientOrderDetailScreenState extends ConsumerState<ClientOrderDetailScree
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Itemized Receipt', style: TextStyle(fontWeight: FontWeight.w900)),
+                const Text(
+                  'Itemized Receipt',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
                 const Divider(),
-                ...items.map((i) => _BillRow('${i['quantity']}x ${i['itemName']}', bdt(i['lineTotalBdt'] as num))),
+                ...items.map(
+                  (i) => _BillRow(
+                    '${i['quantity']}x ${i['itemName']}',
+                    bdt(i['lineTotalBdt'] as num),
+                  ),
+                ),
                 const Divider(),
-                _BillRow('Total Paid (${o['paymentMethod']})', bdt(o['totalBdt'] as num), bold: true),
+                _BillRow(
+                  'Total Paid (${o['paymentMethod']})',
+                  bdt(o['totalBdt'] as num),
+                  bold: true,
+                ),
               ],
             ),
           ),

@@ -23,7 +23,8 @@ class AppConfig {
     await prefs.setString('twobee_server_origin', clean);
   }
 
-  static const String defaultProdServerOrigin = 'https://twobee-api-1o6z.onrender.com';
+  static const String defaultProdServerOrigin =
+      'https://twobee-api-1o6z.onrender.com';
 
   static String get serverOrigin {
     if (_runtimeHostOverride != null && _runtimeHostOverride!.isNotEmpty) {
