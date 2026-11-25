@@ -4,7 +4,7 @@ export interface RouteEstimate {
   distanceKm: number;
   etaMins: number;
   polyline: Array<[number, number]>; // [lat, lng]
-  provider: 'osrm' | 'haversine-fallback';
+  provider: 'barikoi' | 'osrm' | 'haversine-fallback';
 }
 
 export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -22,9 +22,19 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
 }
 
 /**
- * Free Maps & Routing Service: OSRM + OSM Nominatim with resilient local Dhaka fallback
- * so local tests & offline demos run cleanly without API billing keys.
+ * Dual-Layer Maps & Routing Service:
+ * - Primary (when BARIKOI_API_KEY is configured and MAPS_PROVIDER is 'barikoi', 'barikoi_osm', or 'auto'):
+ *   Barikoi Bangladesh Places Autocomplete + Barikoi Routing API v2
+ * - Automatic Fallback (always ready & free):
+ *   OSRM Routing + OSM Nominatim Geocoder -> Dhaka Haversine/preset fallback
  */
+function shouldUseBarikoi(): boolean {
+  return (
+    Boolean(env.barikoiApiKey) &&
+    (env.mapsProvider === 'barikoi' || env.mapsProvider === 'barikoi_osm' || env.mapsProvider === 'auto')
+  );
+}
+
 export const mapsService = {
   async estimateRoute(
     pickupLat: number,
@@ -33,6 +43,36 @@ export const mapsService = {
     dropoffLng: number,
   ): Promise<RouteEstimate> {
     if (env.nodeEnv !== 'test' && process.env.DISABLE_EXTERNAL_HTTP !== 'true') {
+      // 1) Try Barikoi Routing v2 first when configured
+      if (shouldUseBarikoi()) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2500);
+          const url = `https://barikoi.xyz/v2/api/route/${pickupLng},${pickupLat};${dropoffLng},${dropoffLat}?api_key=${encodeURIComponent(env.barikoiApiKey)}&profile=car&geometries=geojson`;
+          const res = await fetch(url, { signal: controller.signal });
+          clearTimeout(timer);
+          if (res.ok) {
+            const data = (await res.json()) as {
+              routes?: Array<{ distance: number; duration: number; geometry?: { coordinates: Array<[number, number]> } }>;
+            };
+            const route = data.routes?.[0];
+            if (route) {
+              return {
+                distanceKm: Math.max(0.5, Number((route.distance / 1000).toFixed(2))),
+                etaMins: Math.max(3, Math.ceil(route.duration / 60)),
+                polyline: (route.geometry?.coordinates ?? []).map(([lng, lat]) => [lat, lng]),
+                provider: 'barikoi',
+              };
+            }
+          } else {
+            console.warn('[2Bee Maps] Barikoi routing HTTP', res.status, '— falling back to OSM OSRM');
+          }
+        } catch (err) {
+          console.warn('[2Bee Maps] Barikoi routing failed — falling back to OSM OSRM:', (err as Error).message);
+        }
+      }
+
+      // 2) Fallback (or primary when MAPS_PROVIDER=osm): Free OSM OSRM routing
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 2500);
@@ -93,8 +133,8 @@ export const mapsService = {
       return localHits.length > 0 ? localHits : dhakaPresets.slice(0, 4);
     }
 
-    // Optional Bangladesh Barikoi Places autocomplete
-    if (env.mapsProvider === 'barikoi' && env.barikoiApiKey && q.length >= 2) {
+    // 1) Primary Bangladesh Barikoi Places autocomplete (when Barikoi enabled)
+    if (shouldUseBarikoi() && q.length >= 2) {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 2500);
@@ -112,13 +152,15 @@ export const mapsService = {
               lng: Number(p.longitude),
             }));
           }
+        } else {
+          console.warn('[2Bee Maps] Barikoi places HTTP', res.status, '— falling back to OSM Nominatim');
         }
-      } catch {
-        // fallback to Nominatim / local
+      } catch (err) {
+        console.warn('[2Bee Maps] Barikoi places failed — falling back to OSM Nominatim:', (err as Error).message);
       }
     }
 
-    // Optional Google Places Geocode
+    // 2) Optional Google Places Geocode
     if (env.mapsProvider === 'google' && env.googleMapsServerApiKey && q.length >= 2) {
       try {
         const controller = new AbortController();
@@ -145,25 +187,29 @@ export const mapsService = {
       }
     }
 
+    // 3) Free OSM Nominatim fallback (when Barikoi/Google fails or MAPS_PROVIDER=osm)
+    if (q.length >= 2) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 2500);
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&countrycodes=bd&limit=5&q=${encodeURIComponent(query)}`,
+          { headers: { 'User-Agent': '2BeeApp/1.0' }, signal: controller.signal },
+        );
+        clearTimeout(timer);
+        if (res.ok) {
+          const items = (await res.json()) as Array<{ display_name: string; lat: string; lon: string }>;
+          if (items.length > 0) {
+            return items.map((i) => ({ displayName: i.display_name, lat: Number(i.lat), lng: Number(i.lon) }));
+          }
+        }
+      } catch {
+        // ignore network error and fall back to Dhaka presets
+      }
+    }
+
     if (localHits.length > 0) {
       return localHits;
-    }
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&countrycodes=bd&limit=5&q=${encodeURIComponent(query)}`,
-        { headers: { 'User-Agent': '2BeeApp/1.0' }, signal: controller.signal },
-      );
-      clearTimeout(timer);
-      if (res.ok) {
-        const items = (await res.json()) as Array<{ display_name: string; lat: string; lon: string }>;
-        if (items.length > 0) {
-          return items.map((i) => ({ displayName: i.display_name, lat: Number(i.lat), lng: Number(i.lon) }));
-        }
-      }
-    } catch {
-      // ignore network error
     }
     return dhakaPresets;
   },

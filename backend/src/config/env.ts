@@ -44,8 +44,8 @@ export const env = {
   bdtToUsdRate: Number(process.env.BDT_TO_USD_RATE ?? 0.0084),
   mfsLiveEnabled: process.env.MFS_LIVE_ENABLED === 'true',
 
-  // Maps & Storage
-  mapsProvider: (process.env.MAPS_PROVIDER ?? 'osm').toLowerCase() as 'osm' | 'barikoi' | 'google',
+  // Maps & Storage ('barikoi_osm' | 'barikoi' | 'osm' | 'google' | 'auto')
+  mapsProvider: (process.env.MAPS_PROVIDER ?? 'osm').toLowerCase() as 'osm' | 'barikoi' | 'barikoi_osm' | 'google' | 'auto',
   osrmBaseUrl: process.env.OSRM_BASE_URL ?? 'https://router.project-osrm.org',
   barikoiApiKey: process.env.BARIKOI_API_KEY ?? '',
   googleMapsServerApiKey: process.env.GOOGLE_MAPS_SERVER_API_KEY ?? '',

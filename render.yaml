@@ -21,7 +21,9 @@ services:
       - key: REDIS_URL
         sync: false
       - key: MAPS_PROVIDER
-        value: osm
+        value: barikoi_osm
+      - key: BARIKOI_API_KEY
+        sync: false # Set privately in Render Dashboard Environment Variables
       - key: OSRM_BASE_URL
         value: https://router.project-osrm.org
       - key: PAYMENT_MODE
