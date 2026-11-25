@@ -14,8 +14,8 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/twobee_dev?schema=public',
 
   // Redis GEO & H3 Q6 Honeycomb matching (Upstash free Redis or in-memory fallback)
-  redisUrl: process.env.REDIS_URL ?? '',
-  geoBackend: (process.env.GEO_BACKEND ?? 'auto').toLowerCase() as 'auto' | 'redis' | 'memory',
+  redisUrl: (process.env.REDIS_URL ?? '').trim().replace(/^['"]|['"]$/g, ''),
+  geoBackend: (process.env.GEO_BACKEND ?? 'auto').trim().toLowerCase() as 'auto' | 'redis' | 'memory',
   h3Resolution: Number(process.env.H3_RESOLUTION ?? 6),
 
   // JWT & Compliance rules
