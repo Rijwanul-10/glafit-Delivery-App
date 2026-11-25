@@ -309,10 +309,10 @@ panel.get(
       recentCompletedTrips:
         rp.kycStatus === 'APPROVED'
           ? [
-              ...recentFood.map((f) => ({ id: f.id, code: f.orderCode, type: 'FOOD', label: f.deliveryAddress, payoutBdt: f.riderPayoutBdt })),
-              ...recentParcels.map((p) => ({ id: p.id, code: p.trackingCode, type: 'PARCEL', label: `${p.pickupAddress} → ${p.dropoffAddress}`, payoutBdt: p.riderPayoutBdt })),
-              ...recentRides.map((r) => ({ id: r.id, code: r.tripCode, type: 'RIDE', label: `${r.pickupAddress} → ${r.dropoffAddress}`, payoutBdt: r.riderPayoutBdt })),
-            ].slice(0, 5)
+            ...recentFood.map((f) => ({ id: f.id, code: f.orderCode, type: 'FOOD', label: f.deliveryAddress, payoutBdt: f.riderPayoutBdt })),
+            ...recentParcels.map((p) => ({ id: p.id, code: p.trackingCode, type: 'PARCEL', label: `${p.pickupAddress} → ${p.dropoffAddress}`, payoutBdt: p.riderPayoutBdt })),
+            ...recentRides.map((r) => ({ id: r.id, code: r.tripCode, type: 'RIDE', label: `${r.pickupAddress} → ${r.dropoffAddress}`, payoutBdt: r.riderPayoutBdt })),
+          ].slice(0, 5)
           : [], // Never render fake trips while pending!
       activeBatch,
       activeRental,
@@ -456,16 +456,16 @@ panel.get(
       }),
       msEligible
         ? prisma.rideTrip.findMany({
-            where: {
-              riderId: null,
-              status: 'MATCHING',
-              fleetTier: '2BEE_EV_SOLO',
-              pickupZoneId: activeParcel!.originZoneId, // Strictly Zone A
-              dropoffZoneId: activeParcel!.destinationZoneId, // Strictly Zone B
-            },
-            include: { user: { select: { fullName: true } } },
-            take: 10,
-          })
+          where: {
+            riderId: null,
+            status: 'MATCHING',
+            fleetTier: '2BEE_EV_SOLO',
+            pickupZoneId: activeParcel!.originZoneId, // Strictly Zone A
+            dropoffZoneId: activeParcel!.destinationZoneId, // Strictly Zone B
+          },
+          include: { user: { select: { fullName: true } } },
+          take: 10,
+        })
         : Promise.resolve([]),
     ]);
 
@@ -1496,8 +1496,8 @@ panel.post(
       bikeId.includes('none')
         ? 'Glafit N-One Pro (Heavy Duty Dual Battery)'
         : bikeId.includes('commuter')
-            ? 'Glafit Commuter Lite EV'
-            : 'Glafit GFR-02 Dual-Power EV'
+          ? 'Glafit Commuter Lite EV'
+          : 'Glafit GFR-02 Dual-Power EV'
     );
     const hubName = bike?.hubName ?? 'Banani Hub (Sector 11)';
     const dailyRate = bike?.dailyRateBdt ?? (bikeId.includes('none') ? 250 : bikeId.includes('commuter') ? 140 : 180);
