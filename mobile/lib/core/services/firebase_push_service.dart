@@ -20,6 +20,8 @@ class FirebasePushService {
   static bool _initialized = false;
   static bool _listenersBound = false;
 
+  static bool get isInitialized => _initialized;
+
   static Future<void> initSafely() async {
     if (_initialized) return;
     // On Web, Firebase.initializeApp() requires explicit FirebaseOptions; skip unless configured.

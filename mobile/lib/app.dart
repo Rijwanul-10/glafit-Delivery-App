@@ -42,6 +42,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             phone: extra['phone']?.toString() ?? '',
             devHint: extra['devHint']?.toString(),
             isNewUser: extra['isNewUser'] == true,
+            firebaseVerificationId: extra['firebaseVerificationId']?.toString(),
           );
         },
       ),

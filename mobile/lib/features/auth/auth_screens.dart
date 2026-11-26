@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/firebase_push_service.dart';
 import '../../core/theme/twobee_theme.dart';
 import '../common/shared_screens.dart';
 
@@ -365,6 +367,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _loading = false;
   String? _error;
 
+  String _normalizePhoneForFirebase(String raw) {
+    final digits = raw.replaceAll(RegExp(r'[^\d]'), '');
+    if (RegExp(r'^8801[3-9]\d{8}$').hasMatch(digits)) return '+$digits';
+    if (RegExp(r'^01[3-9]\d{8}$').hasMatch(digits)) return '+88$digits';
+    if (RegExp(r'^1[3-9]\d{8}$').hasMatch(digits)) return '+880$digits';
+    return raw.startsWith('+') ? raw : '+$digits';
+  }
+
   Future<void> _sendOtp() async {
     final raw = _phoneCtrl.text.trim();
     if (raw.isEmpty) {
@@ -375,6 +385,60 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _loading = true;
       _error = null;
     });
+
+    if (FirebasePushService.isInitialized) {
+      final phone = _normalizePhoneForFirebase(raw);
+      try {
+        await FirebaseAuth.instance.verifyPhoneNumber(
+          phoneNumber: phone,
+          timeout: const Duration(seconds: 60),
+          verificationCompleted: (PhoneAuthCredential cred) async {
+            try {
+              final userCred = await FirebaseAuth.instance.signInWithCredential(cred);
+              final idToken = await userCred.user?.getIdToken();
+              if (idToken == null) return;
+              final res = await ref.read(apiClientProvider).post('/auth/firebase-phone-login', body: {'idToken': idToken});
+              await ref.read(authControllerProvider.notifier).applyOtpLogin(res);
+              if (!mounted) return;
+              final needsProfile = res['needsProfileSetup'] == true || ref.read(authControllerProvider).needsProfileSetup;
+              context.go(needsProfile ? '/register-profile' : '/roles');
+            } catch (e) {
+              if (mounted) setState(() => _error = e.toString());
+            } finally {
+              if (mounted) setState(() => _loading = false);
+            }
+          },
+          verificationFailed: (FirebaseAuthException e) {
+            if (mounted) {
+              setState(() {
+                _loading = false;
+                _error = e.message ?? 'Firebase Phone verification failed (${e.code})';
+              });
+            }
+          },
+          codeSent: (String verificationId, int? resendToken) {
+            if (!mounted) return;
+            setState(() => _loading = false);
+            context.push('/otp', extra: {
+              'phone': phone,
+              'firebaseVerificationId': verificationId,
+              'isNewUser': false,
+            });
+          },
+          codeAutoRetrievalTimeout: (_) {},
+        );
+        return;
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _error = e.toString();
+          });
+        }
+        return;
+      }
+    }
+
     try {
       final res = await ref.read(apiClientProvider).post('/auth/otp/request', body: {
         'phone': raw,
@@ -541,7 +605,14 @@ class OtpVerificationScreen extends ConsumerStatefulWidget {
   final String phone;
   final String? devHint;
   final bool isNewUser;
-  const OtpVerificationScreen({super.key, required this.phone, this.devHint, this.isNewUser = false});
+  final String? firebaseVerificationId;
+  const OtpVerificationScreen({
+    super.key,
+    required this.phone,
+    this.devHint,
+    this.isNewUser = false,
+    this.firebaseVerificationId,
+  });
 
   @override
   ConsumerState<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
@@ -576,11 +647,25 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
       _error = null;
     });
     try {
-      final res = await ref.read(apiClientProvider).post('/auth/otp/verify', body: {
-        'phone': widget.phone,
-        'code': _otpCtrl.text.trim(),
-        'purpose': 'LOGIN',
-      });
+      Map<String, dynamic> res;
+      if (widget.firebaseVerificationId != null && widget.firebaseVerificationId!.isNotEmpty) {
+        final phoneCred = PhoneAuthProvider.credential(
+          verificationId: widget.firebaseVerificationId!,
+          smsCode: _otpCtrl.text.trim(),
+        );
+        final userCred = await FirebaseAuth.instance.signInWithCredential(phoneCred);
+        final idToken = await userCred.user?.getIdToken();
+        if (idToken == null) throw Exception('Failed to retrieve Firebase ID token');
+        res = await ref.read(apiClientProvider).post('/auth/firebase-phone-login', body: {
+          'idToken': idToken,
+        });
+      } else {
+        res = await ref.read(apiClientProvider).post('/auth/otp/verify', body: {
+          'phone': widget.phone,
+          'code': _otpCtrl.text.trim(),
+          'purpose': 'LOGIN',
+        });
+      }
       await ref.read(authControllerProvider.notifier).applyOtpLogin(res);
       if (!mounted) return;
       final needsProfile = res['needsProfileSetup'] == true || ref.read(authControllerProvider).needsProfileSetup;
