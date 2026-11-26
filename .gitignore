@@ -13,6 +13,8 @@ mobile/.packages
 .env
 backend/.env
 mobile/.env
+*-firebase-adminsdk-*.json
+*service-account*.json
 
 # OS & IDEs
 .DS_Store

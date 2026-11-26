@@ -53,6 +53,8 @@ export function createExpressApp() {
       env: env.nodeEnv,
       dbMode: env.dbMode,
       geoEngine: geoMatchService.getEngineName(),
+      geoNote: geoMatchService.getInitNote(),
+      h3Resolution: env.h3Resolution,
       geoBackend: env.geoBackend,
       redisUrlConfigured: Boolean(env.redisUrl),
       geoLastError: geoMatchService.getLastError(),

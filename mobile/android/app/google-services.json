@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "246757987656",
+    "project_id": "twobee-prod",
+    "storage_bucket": "twobee-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:246757987656:android:05e34cf0ac747427cb8f7d",
+        "android_client_info": {
+          "package_name": "app.twobee.twobee_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyASTm-6T_uzT8LIIZnsPu0uv7f7u3RMwMg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
