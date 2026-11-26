@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../config/app_config.dart';
+import '../services/firebase_push_service.dart';
 
 class ApiException implements Exception {
   final String code;
@@ -311,6 +312,8 @@ class AuthController extends StateNotifier<AuthSessionState> {
     final sock = ref.read(socketServiceProvider);
     sock.connect(token);
     sock.joinUser(data['user']['id'] as String);
+    final role = (data['user']?['activeRole'] as String?) ?? 'CLIENT';
+    FirebasePushService.syncTokenWithBackend(ref, role: role);
   }
 
   Future<void> completeUserProfile({required String fullName, String? email}) async {
