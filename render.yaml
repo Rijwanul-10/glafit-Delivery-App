@@ -29,7 +29,13 @@ services:
       - key: PAYMENT_MODE
         value: stripe_sandbox
       - key: SMS_PROVIDER
-        value: mock
+        sync: false # Set to twilio (or mock) in Render Dashboard Environment Variables
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
       - key: DATABASE_URL

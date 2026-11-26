@@ -49,4 +49,11 @@ class AppConfig {
   );
 
   static const bool mfsPreviewOnly = true;
+
+  /// Use backend `/auth/otp/request` (Twilio / local SMS gateways) by default
+  /// so real SMS does not require Firebase Blaze billing.
+  static const bool useFirebasePhoneAuth = bool.fromEnvironment(
+    'USE_FIREBASE_PHONE_AUTH',
+    defaultValue: false,
+  );
 }

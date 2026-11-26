@@ -1,8 +1,10 @@
 import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import '../../core/services/firebase_push_service.dart';
@@ -49,11 +51,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: TwoBeeColors.primary.withValues(alpha: 0.15),
                   borderRadius: TwoBeeRadii.pill,
-                  border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: TwoBeeColors.primary.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: const Text(
                   '⚡ 100% ELECTRIC FLEET',
@@ -187,7 +194,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: TwoBeeColors.primary.withValues(alpha: 0.15),
                       borderRadius: TwoBeeRadii.pill,
@@ -241,13 +251,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 color: TwoBeeColors.surfaceTonal,
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(s.icon, size: 64, color: TwoBeeColors.primary),
+                              child: Icon(
+                                s.icon,
+                                size: 64,
+                                color: TwoBeeColors.primary,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 36),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
                           decoration: BoxDecoration(
                             color: TwoBeeColors.surfaceTonal,
                             borderRadius: TwoBeeRadii.pill,
@@ -301,7 +318,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         width: _idx == i ? 28 : 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: _idx == i ? TwoBeeColors.primary : TwoBeeColors.borderSoft,
+                          color: _idx == i
+                              ? TwoBeeColors.primary
+                              : TwoBeeColors.borderSoft,
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
@@ -332,7 +351,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           height: 44,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              width: 1.5,
+                            ),
                           ),
                           child: const Icon(
                             Icons.arrow_forward_rounded,
@@ -386,7 +408,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
 
-    if (FirebasePushService.isInitialized) {
+    if (AppConfig.useFirebasePhoneAuth && FirebasePushService.isInitialized) {
       final phone = _normalizePhoneForFirebase(raw);
       try {
         await FirebaseAuth.instance.verifyPhoneNumber(
@@ -394,13 +416,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           timeout: const Duration(seconds: 60),
           verificationCompleted: (PhoneAuthCredential cred) async {
             try {
-              final userCred = await FirebaseAuth.instance.signInWithCredential(cred);
+              final userCred = await FirebaseAuth.instance.signInWithCredential(
+                cred,
+              );
               final idToken = await userCred.user?.getIdToken();
               if (idToken == null) return;
-              final res = await ref.read(apiClientProvider).post('/auth/firebase-phone-login', body: {'idToken': idToken});
-              await ref.read(authControllerProvider.notifier).applyOtpLogin(res);
+              final res = await ref
+                  .read(apiClientProvider)
+                  .post(
+                    '/auth/firebase-phone-login',
+                    body: {'idToken': idToken},
+                  );
+              await ref
+                  .read(authControllerProvider.notifier)
+                  .applyOtpLogin(res);
               if (!mounted) return;
-              final needsProfile = res['needsProfileSetup'] == true || ref.read(authControllerProvider).needsProfileSetup;
+              final needsProfile =
+                  res['needsProfileSetup'] == true ||
+                  ref.read(authControllerProvider).needsProfileSetup;
               context.go(needsProfile ? '/register-profile' : '/roles');
             } catch (e) {
               if (mounted) setState(() => _error = e.toString());
@@ -412,18 +445,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             if (mounted) {
               setState(() {
                 _loading = false;
-                _error = e.message ?? 'Firebase Phone verification failed (${e.code})';
+                _error =
+                    e.message ??
+                    'Firebase Phone verification failed (${e.code})';
               });
             }
           },
           codeSent: (String verificationId, int? resendToken) {
             if (!mounted) return;
             setState(() => _loading = false);
-            context.push('/otp', extra: {
-              'phone': phone,
-              'firebaseVerificationId': verificationId,
-              'isNewUser': false,
-            });
+            context.push(
+              '/otp',
+              extra: {
+                'phone': phone,
+                'firebaseVerificationId': verificationId,
+                'isNewUser': false,
+              },
+            );
           },
           codeAutoRetrievalTimeout: (_) {},
         );
@@ -440,16 +478,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     try {
-      final res = await ref.read(apiClientProvider).post('/auth/otp/request', body: {
-        'phone': raw,
-        'purpose': 'LOGIN',
-      });
+      final res = await ref
+          .read(apiClientProvider)
+          .post('/auth/otp/request', body: {'phone': raw, 'purpose': 'LOGIN'});
       if (!mounted) return;
-      context.push('/otp', extra: {
-        'phone': res['phone'],
-        'devHint': res['devOtpHint'],
-        'isNewUser': res['isNewUser'] == true || res['needsProfileSetup'] == true,
-      });
+      context.push(
+        '/otp',
+        extra: {
+          'phone': res['phone'],
+          'devHint': res['devOtpHint'],
+          'isNewUser':
+              res['isNewUser'] == true || res['needsProfileSetup'] == true,
+        },
+      );
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -477,18 +518,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: TwoBeeColors.primarySoft.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Text('2Bee Super-App', style: TextStyle(fontWeight: FontWeight.w700, color: TwoBeeColors.primaryDark)),
+                    child: const Text(
+                      '2Bee Super-App',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: TwoBeeColors.primaryDark,
+                      ),
+                    ),
                   ),
                   IconButton(
                     tooltip: 'Server Host Settings',
-                    icon: const Icon(Icons.settings_ethernet_rounded, color: TwoBeeColors.textSecondary),
+                    icon: const Icon(
+                      Icons.settings_ethernet_rounded,
+                      color: TwoBeeColors.textSecondary,
+                    ),
                     onPressed: () async {
-                      final ctrl = TextEditingController(text: AppConfig.serverOrigin);
+                      final ctrl = TextEditingController(
+                        text: AppConfig.serverOrigin,
+                      );
                       await showDialog(
                         context: context,
                         builder: (ctx) => AlertDialog(
@@ -525,53 +580,90 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
               ),
               const SizedBox(height: 20),
-              const Text('Sign in with Phone', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+              const Text(
+                'Sign in with Phone',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 6),
               const Text(
                 'Enter your Bangladesh mobile number. New users set up a quick profile after verifying OTP.',
-                style: TextStyle(color: TwoBeeColors.textSecondary, height: 1.4),
+                style: TextStyle(
+                  color: TwoBeeColors.textSecondary,
+                  height: 1.4,
+                ),
               ),
               const SizedBox(height: 28),
-              const Text('Mobile Number', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const Text(
+                'Mobile Number',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: _phoneCtrl,
                 keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
                   prefixText: '+880  ',
-                  prefixStyle: TextStyle(fontWeight: FontWeight.w700, color: TwoBeeColors.textPrimary),
+                  prefixStyle: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: TwoBeeColors.textPrimary,
+                  ),
                   hintText: '17XX XXXXXX',
                 ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 10),
-                Text(_error!, style: const TextStyle(color: TwoBeeColors.errorText, fontSize: 13)),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: TwoBeeColors.errorText,
+                    fontSize: 13,
+                  ),
+                ),
               ],
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _loading ? null : _sendOtp,
                 child: _loading
-                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
                     : const Text('Send OTP'),
               ),
               const SizedBox(height: 24),
-              const Text('Quick Demo Accounts (Free Dev)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TwoBeeColors.textSecondary)),
+              const Text(
+                'Quick Demo Accounts (Free Dev)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: TwoBeeColors.textSecondary,
+                ),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: [
-                  ('Client (Alex)', '01711111111'),
-                  ('Rider (Rafiqul)', '01712345678'),
-                  ("Sultan's Dine", '01722222222'),
-                  ("Rina's Kitchen", '01733333333'),
-                ].map((pair) {
-                  return ActionChip(
-                    label: Text(pair.$1, style: const TextStyle(fontSize: 12)),
-                    backgroundColor: TwoBeeColors.surfaceCard,
-                    onPressed: () => setState(() => _phoneCtrl.text = pair.$2),
-                  );
-                }).toList(),
+                children:
+                    [
+                      ('Client (Alex)', '01711111111'),
+                      ('Rider (Rafiqul)', '01712345678'),
+                      ("Sultan's Dine", '01722222222'),
+                      ("Rina's Kitchen", '01733333333'),
+                    ].map((pair) {
+                      return ActionChip(
+                        label: Text(
+                          pair.$1,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        backgroundColor: TwoBeeColors.surfaceCard,
+                        onPressed: () =>
+                            setState(() => _phoneCtrl.text = pair.$2),
+                      );
+                    }).toList(),
               ),
               const SizedBox(height: 28),
               Row(
@@ -579,17 +671,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   TextButton(
                     onPressed: () => context.go('/onboarding'),
-                    child: const Text('Replay Onboarding 1–3', style: TextStyle(fontSize: 12)),
+                    child: const Text(
+                      'Replay Onboarding 1–3',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
-                  const Text('·', style: TextStyle(color: TwoBeeColors.textSecondary)),
+                  const Text(
+                    '·',
+                    style: TextStyle(color: TwoBeeColors.textSecondary),
+                  ),
                   TextButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportLegalScreen())),
-                    child: const Text('Terms & Privacy', style: TextStyle(fontSize: 12)),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SupportLegalScreen(),
+                      ),
+                    ),
+                    child: const Text(
+                      'Terms & Privacy',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
-                  const Text('·', style: TextStyle(color: TwoBeeColors.textSecondary)),
+                  const Text(
+                    '·',
+                    style: TextStyle(color: TwoBeeColors.textSecondary),
+                  ),
                   TextButton(
                     onPressed: () => context.push('/screens'),
-                    child: const Text('All Screens', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'All Screens',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -615,7 +730,8 @@ class OtpVerificationScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
+  ConsumerState<OtpVerificationScreen> createState() =>
+      _OtpVerificationScreenState();
 }
 
 class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
@@ -628,7 +744,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.devHint != null) _otpCtrl.text = widget.devHint!;
+    _otpCtrl.text = widget.devHint ?? '123456';
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_resendSec > 0 && mounted) setState(() => _resendSec--);
     });
@@ -648,27 +764,38 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     });
     try {
       Map<String, dynamic> res;
-      if (widget.firebaseVerificationId != null && widget.firebaseVerificationId!.isNotEmpty) {
+      if (widget.firebaseVerificationId != null &&
+          widget.firebaseVerificationId!.isNotEmpty) {
         final phoneCred = PhoneAuthProvider.credential(
           verificationId: widget.firebaseVerificationId!,
           smsCode: _otpCtrl.text.trim(),
         );
-        final userCred = await FirebaseAuth.instance.signInWithCredential(phoneCred);
+        final userCred = await FirebaseAuth.instance.signInWithCredential(
+          phoneCred,
+        );
         final idToken = await userCred.user?.getIdToken();
-        if (idToken == null) throw Exception('Failed to retrieve Firebase ID token');
-        res = await ref.read(apiClientProvider).post('/auth/firebase-phone-login', body: {
-          'idToken': idToken,
-        });
+        if (idToken == null)
+          throw Exception('Failed to retrieve Firebase ID token');
+        res = await ref
+            .read(apiClientProvider)
+            .post('/auth/firebase-phone-login', body: {'idToken': idToken});
       } else {
-        res = await ref.read(apiClientProvider).post('/auth/otp/verify', body: {
-          'phone': widget.phone,
-          'code': _otpCtrl.text.trim(),
-          'purpose': 'LOGIN',
-        });
+        res = await ref
+            .read(apiClientProvider)
+            .post(
+              '/auth/otp/verify',
+              body: {
+                'phone': widget.phone,
+                'code': _otpCtrl.text.trim(),
+                'purpose': 'LOGIN',
+              },
+            );
       }
       await ref.read(authControllerProvider.notifier).applyOtpLogin(res);
       if (!mounted) return;
-      final needsProfile = res['needsProfileSetup'] == true || ref.read(authControllerProvider).needsProfileSetup;
+      final needsProfile =
+          res['needsProfileSetup'] == true ||
+          ref.read(authControllerProvider).needsProfileSetup;
       context.go(needsProfile ? '/register-profile' : '/roles');
     } catch (e) {
       setState(() => _error = e.toString());
@@ -691,35 +818,83 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
               runSpacing: 8,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: TwoBeeColors.surfaceTonal, borderRadius: BorderRadius.circular(8)),
-                  child: const Text('SMS DISPATCH (FREE DEV)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TwoBeeColors.primaryDark)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: TwoBeeColors.surfaceTonal,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    widget.devHint != null
+                        ? 'SMS DISPATCH (DEV)'
+                        : 'SMS VERIFICATION',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: TwoBeeColors.primaryDark,
+                    ),
+                  ),
                 ),
                 if (widget.isNewUser)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: TwoBeeColors.primary.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(8)),
-                    child: const Text('NEW USER · PROFILE SETUP NEXT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TwoBeeColors.primaryDark)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: TwoBeeColors.primary.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'NEW USER · PROFILE SETUP NEXT',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: TwoBeeColors.primaryDark,
+                      ),
+                    ),
                   ),
               ],
             ),
             const SizedBox(height: 14),
-            Text('Enter 6-digit code sent to ${widget.phone}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            Text(
+              'Enter 6-digit code sent to ${widget.phone}',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 8),
             if (widget.devHint != null)
-              Text('Dev OTP: ${widget.devHint}', style: const TextStyle(color: TwoBeeColors.primaryDark, fontWeight: FontWeight.w700)),
+              Text(
+                'Dev OTP: ${widget.devHint}',
+                style: const TextStyle(
+                  color: TwoBeeColors.primaryDark,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             const SizedBox(height: 20),
             TextField(
               controller: _otpCtrl,
               keyboardType: TextInputType.number,
               maxLength: 6,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: 10, color: TwoBeeColors.textPrimary),
-              decoration: const InputDecoration(hintText: '123456', counterText: ''),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 10,
+                color: TwoBeeColors.textPrimary,
+              ),
+              decoration: const InputDecoration(
+                hintText: '123456',
+                counterText: '',
+              ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),
-              Text(_error!, style: const TextStyle(color: TwoBeeColors.errorText)),
+              Text(
+                _error!,
+                style: const TextStyle(color: TwoBeeColors.errorText),
+              ),
             ],
             const SizedBox(height: 20),
             ElevatedButton(
@@ -729,13 +904,34 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
             const SizedBox(height: 12),
             Center(
               child: TextButton(
-                onPressed: _resendSec == 0
+                onPressed: _resendSec == 0 && !_loading
                     ? () async {
-                        await ref.read(apiClientProvider).post('/auth/otp/request', body: {'phone': widget.phone, 'purpose': 'LOGIN'});
-                        setState(() => _resendSec = 30);
+                        setState(() => _error = null);
+                        try {
+                          final res = await ref
+                              .read(apiClientProvider)
+                              .post(
+                                '/auth/otp/request',
+                                body: {
+                                  'phone': widget.phone,
+                                  'purpose': 'LOGIN',
+                                },
+                              );
+                          final hint = res['devOtpHint']?.toString();
+                          if (mounted) {
+                            setState(() {
+                              _resendSec = 30;
+                              if (hint != null) _otpCtrl.text = hint;
+                            });
+                          }
+                        } catch (e) {
+                          if (mounted) setState(() => _error = e.toString());
+                        }
                       }
                     : null,
-                child: Text(_resendSec == 0 ? 'Resend Code' : 'Resend in ${_resendSec}s'),
+                child: Text(
+                  _resendSec == 0 ? 'Resend Code' : 'Resend in ${_resendSec}s',
+                ),
               ),
             ),
           ],
@@ -750,10 +946,12 @@ class CompleteUserProfileScreen extends ConsumerStatefulWidget {
   const CompleteUserProfileScreen({super.key});
 
   @override
-  ConsumerState<CompleteUserProfileScreen> createState() => _CompleteUserProfileScreenState();
+  ConsumerState<CompleteUserProfileScreen> createState() =>
+      _CompleteUserProfileScreenState();
 }
 
-class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileScreen> {
+class _CompleteUserProfileScreenState
+    extends ConsumerState<CompleteUserProfileScreen> {
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   bool _saving = false;
@@ -769,7 +967,9 @@ class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileS
   Future<void> _submit() async {
     final name = _nameCtrl.text.trim();
     if (name.length < 2) {
-      setState(() => _error = 'Please enter your full name (at least 2 characters)');
+      setState(
+        () => _error = 'Please enter your full name (at least 2 characters)',
+      );
       return;
     }
     setState(() {
@@ -777,10 +977,9 @@ class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileS
       _error = null;
     });
     try {
-      await ref.read(authControllerProvider.notifier).completeUserProfile(
-            fullName: name,
-            email: _emailCtrl.text.trim(),
-          );
+      await ref
+          .read(authControllerProvider.notifier)
+          .completeUserProfile(fullName: name, email: _emailCtrl.text.trim());
       if (mounted) context.go('/roles');
     } catch (e) {
       setState(() => _error = e.toString());
@@ -791,7 +990,8 @@ class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileS
 
   @override
   Widget build(BuildContext context) {
-    final phone = ref.watch(authControllerProvider).user?['phone']?.toString() ?? '';
+    final phone =
+        ref.watch(authControllerProvider).user?['phone']?.toString() ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -805,44 +1005,83 @@ class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileS
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: TwoBeeColors.surfaceTonal,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Text(
                   'NEW ACCOUNT SETUP',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: TwoBeeColors.primaryDark, letterSpacing: 0.5),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: TwoBeeColors.primaryDark,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Complete Your Profile', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
+              const Text(
+                'Complete Your Profile',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 6),
               const Text(
                 'Link your basic profile to your verified phone number. Role-specific details (Rider or Merchant KYC) are completed inside those roles.',
-                style: TextStyle(color: TwoBeeColors.textSecondary, height: 1.4, fontSize: 13),
+                style: TextStyle(
+                  color: TwoBeeColors.textSecondary,
+                  height: 1.4,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 20),
               if (phone.isNotEmpty) ...[
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: TwoBeeColors.surfaceTonal,
                     borderRadius: TwoBeeRadii.inner,
-                    border: Border.all(color: TwoBeeColors.primary.withValues(alpha: 0.45)),
+                    border: Border.all(
+                      color: TwoBeeColors.primary.withValues(alpha: 0.45),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.verified_rounded, color: TwoBeeColors.primaryDark, size: 20),
+                      const Icon(
+                        Icons.verified_rounded,
+                        color: TwoBeeColors.primaryDark,
+                        size: 20,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('VERIFIED PHONE NUMBER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: TwoBeeColors.primaryDark, letterSpacing: 0.5)),
+                            const Text(
+                              'VERIFIED PHONE NUMBER',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: TwoBeeColors.primaryDark,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                             const SizedBox(height: 2),
-                            Text(phone, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: TwoBeeColors.textPrimary)),
+                            Text(
+                              phone,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: TwoBeeColors.textPrimary,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -851,7 +1090,10 @@ class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileS
                 ),
                 const SizedBox(height: 20),
               ],
-              const Text('Full Name *', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+              const Text(
+                'Full Name *',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: _nameCtrl,
@@ -862,7 +1104,10 @@ class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileS
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Email Address (Optional)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+              const Text(
+                'Email Address (Optional)',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: _emailCtrl,
@@ -874,7 +1119,14 @@ class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileS
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: TwoBeeColors.errorText, fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: TwoBeeColors.errorText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
               const SizedBox(height: 24),
               ElevatedButton(
@@ -886,8 +1138,21 @@ class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileS
                 ),
                 onPressed: _saving ? null : _submit,
                 child: _saving
-                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: TwoBeeColors.textPrimary, strokeWidth: 2))
-                    : const Text('Save Profile & Continue ➔', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: TwoBeeColors.textPrimary,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'Save Profile & Continue ➔',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                        ),
+                      ),
               ),
               const SizedBox(height: 12),
               Center(
@@ -895,7 +1160,9 @@ class _CompleteUserProfileScreenState extends ConsumerState<CompleteUserProfileS
                   onPressed: _saving
                       ? null
                       : () async {
-                          await ref.read(authControllerProvider.notifier).logout();
+                          await ref
+                              .read(authControllerProvider.notifier)
+                              .logout();
                           if (context.mounted) context.go('/login');
                         },
                   child: const Text('Use a different phone number'),
@@ -914,7 +1181,8 @@ class RoleSelectionScreen extends ConsumerStatefulWidget {
   const RoleSelectionScreen({super.key});
 
   @override
-  ConsumerState<RoleSelectionScreen> createState() => _RoleSelectionScreenState();
+  ConsumerState<RoleSelectionScreen> createState() =>
+      _RoleSelectionScreenState();
 }
 
 class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
@@ -924,7 +1192,9 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(authControllerProvider.notifier).refreshRoles());
+    Future.microtask(
+      () => ref.read(authControllerProvider.notifier).refreshRoles(),
+    );
   }
 
   Future<void> _continue() async {
@@ -961,7 +1231,9 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
 
     String riderBadge = 'Setup KYC + 4-digit PIN';
     if (rider['registered'] == true) {
-      riderBadge = rider['kycStatus'] == 'APPROVED' ? 'Approved · 4-digit PIN' : 'Status: ${rider['kycStatus']}';
+      riderBadge = rider['kycStatus'] == 'APPROVED'
+          ? 'Approved · 4-digit PIN'
+          : 'Status: ${rider['kycStatus']}';
     }
 
     String merchantBadge = 'Register Physical / Home Kitchen';
@@ -971,7 +1243,8 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
       } else if (merchant['kycStatus'] == 'APPROVED') {
         merchantBadge = '${merchant['businessName']} · 6-digit PIN';
       } else {
-        merchantBadge = 'Status: ${merchant['kycStatus']} (No PIN until approved)';
+        merchantBadge =
+            'Status: ${merchant['kycStatus']} (No PIN until approved)';
       }
     }
 
@@ -1006,7 +1279,11 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
             children: [
               const Text(
                 'One verified Bangladesh phone number powers all roles. No re-OTP required when switching.',
-                style: TextStyle(color: TwoBeeColors.textSecondary, height: 1.4, fontSize: 13),
+                style: TextStyle(
+                  color: TwoBeeColors.textSecondary,
+                  height: 1.4,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 20),
               _RoleCard(
@@ -1020,7 +1297,8 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
               const SizedBox(height: 14),
               _RoleCard(
                 title: 'Rider Partner',
-                subtitle: 'Deliver Food, Parcels, Rides & Zone A→B Multi-Service',
+                subtitle:
+                    'Deliver Food, Parcels, Rides & Zone A→B Multi-Service',
                 badge: riderBadge,
                 icon: Icons.two_wheeler_rounded,
                 selected: _selected == 'RIDER',
@@ -1046,14 +1324,19 @@ class _RoleSelectionScreenState extends ConsumerState<RoleSelectionScreen> {
                     backgroundColor: TwoBeeColors.primary,
                     foregroundColor: TwoBeeColors.textPrimary,
                     minimumSize: const Size.fromHeight(54),
-                    shape: RoundedRectangleBorder(borderRadius: TwoBeeRadii.pill),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: TwoBeeRadii.pill,
+                    ),
                   ),
                   onPressed: _loading ? null : _continue,
                   child: Text(
                     _loading
                         ? 'Opening...'
                         : 'Continue as ${_selected[0]}${_selected.substring(1).toLowerCase()} ->',
-                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
               ),
@@ -1096,7 +1379,9 @@ class _RoleCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: TwoBeeColors.surfaceCard,
             borderRadius: TwoBeeRadii.card,
-            boxShadow: selected ? TwoBeeShadows.emeraldGlow : TwoBeeShadows.softCard,
+            boxShadow: selected
+                ? TwoBeeShadows.emeraldGlow
+                : TwoBeeShadows.softCard,
             border: Border.all(
               color: selected ? TwoBeeColors.primary : TwoBeeColors.borderSoft,
               width: selected ? 2.2 : 1,
@@ -1115,7 +1400,9 @@ class _RoleCard extends StatelessWidget {
                 ),
                 child: Icon(
                   icon,
-                  color: selected ? TwoBeeColors.primaryAccent : TwoBeeColors.textSecondary,
+                  color: selected
+                      ? TwoBeeColors.primaryAccent
+                      : TwoBeeColors.textSecondary,
                   size: 26,
                 ),
               ),
@@ -1126,16 +1413,26 @@ class _RoleCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       subtitle,
-                      style: const TextStyle(fontSize: 12, color: TwoBeeColors.textSecondary, height: 1.3),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: TwoBeeColors.textSecondary,
+                        height: 1.3,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3.5,
+                      ),
                       decoration: BoxDecoration(
                         color: TwoBeeColors.surfaceTonal,
                         borderRadius: TwoBeeRadii.pill,
@@ -1160,12 +1457,18 @@ class _RoleCard extends StatelessWidget {
                   color: selected ? TwoBeeColors.primary : Colors.transparent,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: selected ? TwoBeeColors.primary : TwoBeeColors.borderSoft,
+                    color: selected
+                        ? TwoBeeColors.primary
+                        : TwoBeeColors.borderSoft,
                     width: 1.5,
                   ),
                 ),
                 child: selected
-                    ? const Icon(Icons.check, size: 16, color: TwoBeeColors.textPrimary)
+                    ? const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: TwoBeeColors.textPrimary,
+                      )
                     : null,
               ),
             ],
@@ -1175,4 +1478,3 @@ class _RoleCard extends StatelessWidget {
     );
   }
 }
-

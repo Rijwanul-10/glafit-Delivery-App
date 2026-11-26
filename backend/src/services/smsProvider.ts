@@ -1,9 +1,10 @@
 import crypto from 'node:crypto';
 import { env } from '../config/env.js';
+import { HttpError } from '../middleware/errorHandler.js';
 
 export interface SmsProvider {
   sendOtp(phone: string, code: string, purpose: string): Promise<{ delivered: boolean; devHint?: string }>;
-  sendAlert(phone: string, message: string): Promise<{ delivered: boolean }>;
+  sendAlert(phone: string, message: string): Promise<{ delivered: boolean; errorMessage?: string }>;
 }
 
 function buildOtpMessage(code: string, purpose: string): string {
@@ -80,7 +81,21 @@ class GreenWebSmsProvider implements SmsProvider {
 
 class TwilioSmsProvider implements SmsProvider {
   async sendOtp(phone: string, code: string, purpose: string) {
-    await this.sendAlert(phone, buildOtpMessage(code, purpose));
+    if (!env.twilioAccountSid || !env.twilioAuthToken || !env.twilioFrom) {
+      throw new HttpError(
+        500,
+        'SMS_CONFIG_MISSING',
+        'Twilio credentials (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM) are not configured',
+      );
+    }
+    const result = await this.sendAlert(phone, buildOtpMessage(code, purpose));
+    if (!result.delivered) {
+      throw new HttpError(
+        502,
+        'SMS_DELIVERY_FAILED',
+        result.errorMessage ?? 'Failed to deliver OTP SMS via Twilio',
+      );
+    }
     return { delivered: true };
   }
 
@@ -88,10 +103,11 @@ class TwilioSmsProvider implements SmsProvider {
     if (!env.twilioAccountSid || !env.twilioAuthToken || !env.twilioFrom) {
       console.warn('[2Bee SMS][Twilio] Missing Twilio credentials; falling back to console log');
       console.info(`[2Bee SMS][ALERT] -> ${phone}: ${message}`);
-      return { delivered: true };
+      return { delivered: false, errorMessage: 'Missing Twilio credentials' };
     }
     const auth = Buffer.from(`${env.twilioAccountSid}:${env.twilioAuthToken}`).toString('base64');
-    const body = new URLSearchParams({ To: phone, From: env.twilioFrom, Body: message });
+    const fromKey = env.twilioFrom.trim().startsWith('MG') ? 'MessagingServiceSid' : 'From';
+    const body = new URLSearchParams({ To: phone, [fromKey]: env.twilioFrom.trim(), Body: message });
     const res = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${env.twilioAccountSid}/Messages.json`,
       {
@@ -103,7 +119,20 @@ class TwilioSmsProvider implements SmsProvider {
         body,
       },
     );
-    return { delivered: res.ok };
+    if (!res.ok) {
+      let errorMessage = `Twilio HTTP ${res.status}`;
+      try {
+        const data = (await res.json()) as { message?: string; code?: number };
+        if (data?.message) {
+          errorMessage = data.code ? `Twilio (${data.code}): ${data.message}` : data.message;
+        }
+      } catch {
+        // Keep HTTP status fallback when response is not JSON
+      }
+      console.warn('[2Bee SMS][Twilio] Delivery failed:', errorMessage);
+      return { delivered: false, errorMessage };
+    }
+    return { delivered: true };
   }
 }
 
@@ -126,7 +155,12 @@ function createSmsProvider(): SmsProvider {
 export const smsProvider: SmsProvider = createSmsProvider();
 
 export function generateOtpCode(): string {
-  if (env.nodeEnv !== 'production' && env.devStaticOtp && /^\d{6}$/.test(env.devStaticOtp)) {
+  if (
+    env.nodeEnv !== 'production' &&
+    env.smsProvider === 'mock' &&
+    env.devStaticOtp &&
+    /^\d{6}$/.test(env.devStaticOtp)
+  ) {
     return env.devStaticOtp;
   }
   return String(Math.floor(100000 + Math.random() * 900000));
